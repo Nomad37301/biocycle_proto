@@ -73,6 +73,22 @@ class DemoControls extends ConsumerWidget {
                 label: const Text('Pulihkan kondisi'),
               ),
             ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    ref.read(demoSessionProvider.notifier).toggleManualPause(),
+                icon: Icon(
+                  state.manuallyPaused ? Icons.play_arrow : Icons.pause,
+                ),
+                label: Text(
+                  state.manuallyPaused
+                      ? 'Lanjutkan simulator'
+                      : 'Jeda simulator',
+                ),
+              ),
+            ),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/app_providers.dart';
@@ -7,11 +8,22 @@ import '../../../shared/widgets/async_content.dart';
 import '../../demo_session/domain/demo_session.dart';
 import '../domain/partner_models.dart';
 
-class RequestsScreen extends ConsumerWidget {
+enum _Direction { all, incoming, outgoing }
+
+class RequestsScreen extends ConsumerStatefulWidget {
   const RequestsScreen({super.key});
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final role = ref.watch(demoSessionProvider).role;
+  ConsumerState<RequestsScreen> createState() => _RequestsScreenState();
+}
+
+class _RequestsScreenState extends ConsumerState<RequestsScreen> {
+  _Direction direction = _Direction.all;
+  RequestStatus? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final accountId = ref.watch(demoSessionProvider).role.organizationId;
     return ContentWidth(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -21,30 +33,75 @@ class RequestsScreen extends ConsumerWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 4),
-          const Text('Status dan riwayat diperbarui pada perangkat ini.'),
+          const Text(
+            'Buka pengajuan untuk memproses status dan melihat riwayat.',
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<_Direction>(
+              segments: const [
+                ButtonSegment(value: _Direction.all, label: Text('Semua')),
+                ButtonSegment(value: _Direction.incoming, label: Text('Masuk')),
+                ButtonSegment(
+                  value: _Direction.outgoing,
+                  label: Text('Keluar'),
+                ),
+              ],
+              selected: {direction},
+              onSelectionChanged: (value) =>
+                  setState(() => direction = value.first),
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<RequestStatus?>(
+            initialValue: status,
+            decoration: const InputDecoration(labelText: 'Status'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Semua status')),
+              ...RequestStatus.values.map(
+                (value) =>
+                    DropdownMenuItem(value: value, child: Text(value.label)),
+              ),
+            ],
+            onChanged: (value) => setState(() => status = value),
+          ),
           const SizedBox(height: 16),
           Expanded(
             child: ref
                 .watch(requestsProvider)
                 .when(
-                  loading: () => const AppLoading(),
+                  loading: () => const AppLoading(label: 'Memuat pengajuan...'),
                   error: (_, _) => AppError(
                     message: 'Pengajuan gagal dimuat.',
                     onRetry: () => ref.invalidate(requestsProvider),
                   ),
-                  data: (items) => items.isEmpty
-                      ? const EmptyState(
-                          icon: Icons.handshake_outlined,
-                          title: 'Belum ada pengajuan',
-                          message: 'Pilih penawaran di jaringan mitra untuk memulai kerja sama.',
-                        )
-                      : ListView.separated(
-                          itemCount: items.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (_, index) =>
-                              _RequestCard(item: items[index], role: role),
-                        ),
+                  data: (all) {
+                    final items = all.where((item) {
+                      final directionMatches = switch (direction) {
+                        _Direction.all => true,
+                        _Direction.incoming => item.receiverId == accountId,
+                        _Direction.outgoing => item.senderId == accountId,
+                      };
+                      return directionMatches &&
+                          (status == null || item.status == status);
+                    }).toList();
+                    if (items.isEmpty) {
+                      return const EmptyState(
+                        icon: Icons.handshake_outlined,
+                        title: 'Tidak ada pengajuan pada filter ini',
+                        message: 'Ubah filter atau pilih peluang kerja sama untuk membuat pengajuan.',
+                      );
+                    }
+                    return ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (_, index) => _RequestCard(
+                        item: items[index],
+                        incoming: items[index].receiverId == accountId,
+                      ),
+                    );
+                  },
                 ),
           ),
         ],
@@ -53,15 +110,16 @@ class RequestsScreen extends ConsumerWidget {
   }
 }
 
-class _RequestCard extends ConsumerWidget {
-  const _RequestCard({required this.item, required this.role});
+class _RequestCard extends StatelessWidget {
+  const _RequestCard({required this.item, required this.incoming});
   final CooperationRequest item;
-  final DemoRole role;
+  final bool incoming;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final incoming = item.receiverRole == role;
-    return Card(
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => context.push('/requests/${item.id}'),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -75,91 +133,37 @@ class _RequestCard extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                _Status(status: item.status),
+                _RequestStatusBadge(status: item.status),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 6),
             Text(
               incoming
                   ? 'Dari ${item.senderName}'
                   : 'Kepada ${item.receiverName}',
             ),
             Text(
-              '${item.quantityKg.toStringAsFixed(0)} kg · ${DateFormat('dd MMM, HH:mm').format(item.updatedAt)}',
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _actions(context, ref, incoming),
+              '${formatKg(item.quantityKg)} kg · ${DateFormat('dd MMM, HH:mm').format(item.updatedAt)}',
             ),
           ],
         ),
       ),
-    );
-  }
-
-  List<Widget> _actions(BuildContext context, WidgetRef ref, bool incoming) {
-    if (item.status == RequestStatus.pending && incoming) {
-      return [
-        FilledButton(
-          onPressed: () => _transition(context, ref, RequestStatus.accepted),
-          child: const Text('Terima'),
-        ),
-        OutlinedButton(
-          onPressed: () => _transition(context, ref, RequestStatus.rejected),
-          child: const Text('Tolak'),
-        ),
-      ];
-    }
-    if (item.status == RequestStatus.pending && !incoming) {
-      return [
-        OutlinedButton(
-          onPressed: () => _transition(context, ref, RequestStatus.cancelled),
-          child: const Text('Batalkan'),
-        ),
-      ];
-    }
-    if (item.status == RequestStatus.accepted && role == item.completionRole) {
-      return [
-        FilledButton(
-          onPressed: () => _transition(context, ref, RequestStatus.completed),
-          child: const Text('Tandai barang diterima'),
-        ),
-      ];
-    }
-    return const [];
-  }
-
-  Future<void> _transition(
-    BuildContext context,
-    WidgetRef ref,
-    RequestStatus next,
-  ) async {
-    try {
-      await ref
-          .read(partnerRepositoryProvider)
-          .transitionRequest(item.id, next, role);
-      ref.read(demoSessionProvider.notifier).refresh();
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
-  }
+    ),
+  );
 }
 
-class _Status extends StatelessWidget {
-  const _Status({required this.status});
+class _RequestStatusBadge extends StatelessWidget {
+  const _RequestStatusBadge({required this.status});
   final RequestStatus status;
+
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      RequestStatus.pending => Colors.orange.shade800,
+      RequestStatus.pending => Colors.orange.shade900,
       RequestStatus.accepted => Colors.blue.shade800,
       RequestStatus.completed => Colors.green.shade800,
-      RequestStatus.rejected || RequestStatus.cancelled => Colors.blueGrey,
+      RequestStatus.rejected ||
+      RequestStatus.cancelled => Colors.blueGrey.shade700,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),

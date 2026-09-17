@@ -3,9 +3,13 @@ import 'partner_models.dart';
 
 abstract interface class PartnerRepository {
   Future<List<PartnerProfile>> getPartners();
+  Future<PartnerProfile?> getPartner(int id);
   Future<List<PartnerListing>> getListings();
-  Future<List<CooperationRequest>> getRequests(DemoRole role);
-  Future<void> createListing({
+  Future<PartnerListing?> getListing(int id);
+  Future<List<CooperationRequest>> getRequests(int organizationId);
+  Future<CooperationRequest?> getRequest(int id);
+  Future<List<RequestHistory>> getRequestHistory(int requestId);
+  Future<int> createListing({
     required DemoRole ownerRole,
     required ListingKind kind,
     required String material,
@@ -16,18 +20,25 @@ abstract interface class PartnerRepository {
   });
   Future<void> updateListing({
     required int id,
-    required DemoRole ownerRole,
+    required int ownerId,
     required String material,
     required double quantityKg,
     required DateTime availableDate,
     required String region,
     required String note,
   });
-  Future<void> archiveListing(int id, DemoRole actor);
-  Future<void> createRequest(
-    PartnerListing listing,
-    DemoRole sender,
-    double quantityKg,
-  );
-  Future<void> transitionRequest(int id, RequestStatus next, DemoRole actor);
+  Future<void> archiveListing(int id, int actorId);
+  Future<int> createRequest({
+    required int listingId,
+    required int senderId,
+    required int receiverId,
+    required double quantityKg,
+    required String note,
+  });
+  Future<void> transitionRequest({
+    required int id,
+    required RequestStatus next,
+    required int actorId,
+    String note = '',
+  });
 }

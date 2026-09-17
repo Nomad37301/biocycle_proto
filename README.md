@@ -1,17 +1,31 @@
-# biocycle_proto
+# BioCycle App
 
-A new Flutter project.
+Working prototype Android untuk monitoring unit budidaya BSF, insight tindakan,
+SOP digital, dan kerja sama mitra. Seluruh sensor, unit, serta mitra pada versi
+ini merupakan data simulasi dan aplikasi dapat digunakan tanpa internet.
 
-## Getting Started
+## Menjalankan proyek
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Gunakan ikon sensor pada header untuk memilih skenario **Normal**, **Suhu
+meningkat**, **Kelembapan meningkat**, atau **Perangkat offline**. Menu akun di
+sebelahnya menyediakan pengalih workspace Operator BSF, Penyedia Limbah, dan
+Pembeli Hasil.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Pemeriksaan
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter analyze
+flutter test
+flutter build apk --release
+```
+
+APK release dihasilkan pada
+`build/app/outputs/flutter-apk/app-release.apk`.
+
+Ruang lingkup, keputusan produk, arsitektur, dan kriteria selesai tersedia di
+[`plan.md`](plan.md).

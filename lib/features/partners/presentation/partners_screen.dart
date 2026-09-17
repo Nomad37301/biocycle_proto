@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../shared/widgets/async_content.dart';
@@ -95,37 +96,43 @@ class _PartnersScreenState extends ConsumerState<PartnersScreen> {
                     final count = available
                         .where(
                           (listing) =>
-                              listing.ownerName == partner.name &&
-                              listing.isActive,
+                              listing.ownerId == partner.id && listing.isActive,
                         )
                         .length;
                     return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              child: Text(partner.name.characters.first),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    partner.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                  ),
-                                  Text(
-                                    '${partner.role.label} · ${partner.region}',
-                                  ),
-                                  Text('$count penawaran atau kebutuhan aktif'),
-                                ],
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => context.push('/partners/${partner.id}'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                child: Text(partner.name.characters.first),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      partner.name,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium,
+                                    ),
+                                    Text(
+                                      '${partner.role.label} · ${partner.region}',
+                                    ),
+                                    Text(
+                                      '$count penawaran atau kebutuhan aktif',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right),
+                            ],
+                          ),
                         ),
                       ),
                     );

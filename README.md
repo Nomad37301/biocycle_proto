@@ -37,7 +37,9 @@ Menyediakan simulasi alur kerja sama antara tiga pihak dalam satu basis data:
 - **Penyedia Limbah**: Restoran, pasar, atau industri pengolahan makanan yang menawarkan bahan baku limbah organik.
 - **Operator BSF**: Fasilitas biokonversi yang membutuhkan pasokan limbah dan memproduksi larva kering/segar serta pupuk kasgot.
 - **Pembeli Hasil**: Peternak, perikanan, atau distributor pupuk yang membutuhkan produk turunan BSF.
-- **Siklus Pengajuan Terpadu**: Pembuatan listing penawaran/kebutuhan, pengajuan kemitraan, konfirmasi penerimaan, hingga penyelesaian transaksi.
+- **Siklus Pengajuan Terpadu**: Pembuatan listing penawaran/kebutuhan, pengajuan dua arah, penerimaan atau penolakan, pembatalan, hingga konfirmasi barang diterima.
+- **Jumlah Tersedia**: Transaksi yang diterima dan selesai mengurangi jumlah tersedia sehingga satu listing dapat dipakai untuk beberapa kerja sama parsial.
+- **Riwayat Pengajuan**: Setiap perubahan status menyimpan pelaku, waktu, dan catatan pada perangkat.
 
 ### 5. Multi-Peran Workspace
 Pengalih akun cepat pada app bar memungkinkan demonstrator beralih tampilan dan hak akses secara langsung antara Operator BSF, Penyedia Limbah, dan Pembeli Hasil tanpa perlu proses login ulang.
@@ -50,7 +52,7 @@ Proyek ini dibangun menggunakan pendekatan arsitektur per fitur (feature-first) 
 
 - **Framework**: Flutter 3 (Dart)
 - **State Management**: `flutter_riverpod` (v2.6.1)
-- **Routing**: `go_router` (v18.0.1) dengan konfigurasi `StatefulShellRoute` untuk navigasi tab yang persisten
+- **Routing**: `go_router` (v18.0.1) untuk navigasi tab dan halaman detail
 - **Basis Data Lokal**: `sqflite` (v2.4.4) dan `path`
 - **Visualisasi Data**: `fl_chart` (v1.2.0)
 - **Notifikasi**: `flutter_local_notifications` (v22.3.1)
@@ -125,7 +127,10 @@ lib/
    - Beralih ke peran **Penyedia Limbah** melalui menu profil di app bar.
    - Buat penawaran limbah organik baru pada tab **Partner Hub**.
    - Ganti peran menjadi **Operator BSF**, temukan listing limbah tersebut, lalu ajukan permohonan kemitraan.
-   - Kembali ke peran **Penyedia Limbah** untuk menyetujui pengajuan, lalu selesaikan transaksi saat limbah telah diterima.
+   - Kembali ke peran **Penyedia Limbah** untuk menyetujui pengajuan.
+   - Beralih ke **Operator BSF**, buka pengajuan yang diterima, lalu konfirmasi bahwa limbah telah diterima.
+   - Untuk arah sebaliknya, buka profil operator sebagai penyedia, pilih penawaran limbah milik sendiri, lalu kirim penawaran langsung ke operator.
+   - Uji alur hasil BSF dengan membuat penawaran sebagai operator dan mengajukannya sebagai pembeli. Pembeli menyelesaikan transaksi setelah barang diterima.
 
 ---
 
@@ -147,6 +152,7 @@ flutter test integration_test/app_flow_test.dart
 Cakupan pengujian mencakup:
 - Evaluasi ambang batas parameter sensor (`test/features/monitoring/demo_thresholds_test.dart`)
 - Aturan transisi status permintaan kemitraan (`test/features/partners/request_transition_policy_test.dart`)
+- Pasangan peran, perhitungan sisa jumlah, dan input desimal (`test/features/partners/cooperation_policy_test.dart`)
 - Alur navigasi antarlayar utama (`integration_test/app_flow_test.dart`)
 
 ---
@@ -155,3 +161,4 @@ Cakupan pengujian mencakup:
 
 - Data sensor, daftar mitra, dan transaksi yang ditampilkan merupakan data simulasi lokal untuk keperluan demonstrasi fungsional dan validasi konsep bisnis.
 - Aplikasi tidak terhubung ke perangkat keras IoT fisik, gateway pembayaran, ataupun sistem perpesanan eksternal. Seluruh logika berjalan mandiri pada penyimpanan perangkat.
+- Tiga akun demo berbagi satu database SQLite v3. Pengalih akun dipakai untuk memeriksa kedua sisi transaksi pada perangkat yang sama.

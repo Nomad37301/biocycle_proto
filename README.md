@@ -1,5 +1,9 @@
 # BioCycle Prototype
 
+<p align="center">
+  <img src="asset/ChatGPT%20Image%20Aug%2030,%202026,%2010_03_50%20PM.png" alt="BioCycle Logo" width="220" />
+</p>
+
 Working prototype aplikasi Android untuk pemantauan budidaya Black Soldier Fly (BSF), sistem insight dan rekomendasi berbasis aturan, SOP digital, serta jaringan kemitraan pengolahan limbah organik.
 
 Aplikasi dirancang untuk kebutuhan demonstrasi dan kompetisi inovasi bisnis (IDBIS), berjalan sepenuhnya secara lokal (offline) menggunakan simulasi telemetri dan penyimpanan SQLite tanpa ketergantungan koneksi server eksternal.

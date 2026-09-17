@@ -21,6 +21,13 @@ final notificationProvider = Provider<NotificationService>(
   (_) => throw UnimplementedError(),
 );
 final initialNotificationProvider = Provider<String?>((_) => null);
+final notificationsEnabledProvider = FutureProvider<bool>((ref) async {
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  return await ref
+          .watch(databaseProvider)
+          .getSetting('notifications_enabled') ==
+      'true';
+});
 
 final telemetryRepositoryProvider = Provider<TelemetryRepository>(
   (ref) => LocalTelemetryRepository(ref.watch(databaseProvider)),
@@ -31,6 +38,8 @@ final insightRepositoryProvider = Provider<InsightRepository>(
 final partnerRepositoryProvider = Provider<PartnerRepository>(
   (ref) => LocalPartnerRepository(ref.watch(databaseProvider)),
 );
+
+final partnerRevisionProvider = StateProvider<int>((_) => 0);
 
 final demoSessionProvider =
     StateNotifierProvider<DemoSessionController, DemoSessionState>((ref) {
@@ -72,16 +81,53 @@ final insightProvider = FutureProvider.family<InsightEvent?, int>((ref, id) {
   return ref.watch(insightRepositoryProvider).getInsight(id);
 });
 
-final partnersProvider = FutureProvider<List<PartnerProfile>>(
-  (ref) => ref.watch(partnerRepositoryProvider).getPartners(),
-);
+final insightActionsProvider = FutureProvider.family<List<InsightAction>, int>((
+  ref,
+  id,
+) {
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  return ref.watch(insightRepositoryProvider).getActions(id);
+});
+
+final partnersProvider = FutureProvider<List<PartnerProfile>>((ref) {
+  ref.watch(partnerRevisionProvider);
+  return ref.watch(partnerRepositoryProvider).getPartners();
+});
+
+final partnerProvider = FutureProvider.family<PartnerProfile?, int>((ref, id) {
+  ref.watch(partnerRevisionProvider);
+  return ref.watch(partnerRepositoryProvider).getPartner(id);
+});
 
 final listingsProvider = FutureProvider<List<PartnerListing>>((ref) {
-  ref.watch(demoSessionProvider.select((state) => state.revision));
+  ref.watch(partnerRevisionProvider);
   return ref.watch(partnerRepositoryProvider).getListings();
+});
+
+final listingProvider = FutureProvider.family<PartnerListing?, int>((ref, id) {
+  ref.watch(partnerRevisionProvider);
+  return ref.watch(partnerRepositoryProvider).getListing(id);
 });
 
 final requestsProvider = FutureProvider<List<CooperationRequest>>((ref) {
   final state = ref.watch(demoSessionProvider);
-  return ref.watch(partnerRepositoryProvider).getRequests(state.role);
+  ref.watch(partnerRevisionProvider);
+  return ref
+      .watch(partnerRepositoryProvider)
+      .getRequests(state.role.organizationId);
 });
+
+final requestProvider = FutureProvider.family<CooperationRequest?, int>((
+  ref,
+  id,
+) {
+  ref.watch(partnerRevisionProvider);
+  return ref.watch(partnerRepositoryProvider).getRequest(id);
+});
+
+final requestHistoryProvider = FutureProvider.family<List<RequestHistory>, int>(
+  (ref, id) {
+    ref.watch(partnerRevisionProvider);
+    return ref.watch(partnerRepositoryProvider).getRequestHistory(id);
+  },
+);

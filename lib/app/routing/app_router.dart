@@ -2,8 +2,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/insights/presentation/insight_detail_screen.dart';
 import '../../features/monitoring/presentation/unit_detail_screen.dart';
-import '../../features/partners/domain/partner_models.dart';
+import '../../features/partners/presentation/listing_detail_screen.dart';
 import '../../features/partners/presentation/listing_form_screen.dart';
+import '../../features/partners/presentation/partner_detail_screen.dart';
+import '../../features/partners/presentation/request_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import 'app_shell.dart';
 
@@ -29,7 +31,25 @@ GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
     GoRoute(
       path: '/listings/:id/edit',
       builder: (_, state) =>
-          ListingFormScreen(initial: state.extra! as PartnerListing),
+          ListingEditScreen(listingId: int.parse(state.pathParameters['id']!)),
+    ),
+    GoRoute(
+      path: '/listings/:id',
+      builder: (_, state) => ListingDetailScreen(
+        listingId: int.parse(state.pathParameters['id']!),
+      ),
+    ),
+    GoRoute(
+      path: '/partners/:id',
+      builder: (_, state) => PartnerDetailScreen(
+        partnerId: int.parse(state.pathParameters['id']!),
+      ),
+    ),
+    GoRoute(
+      path: '/requests/:id',
+      builder: (_, state) => RequestDetailScreen(
+        requestId: int.parse(state.pathParameters['id']!),
+      ),
     ),
     GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
   ],

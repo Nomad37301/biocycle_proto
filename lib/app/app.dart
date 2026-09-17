@@ -35,10 +35,10 @@ class _BioCycleAppState extends ConsumerState<BioCycleApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = ref.read(demoSessionProvider.notifier);
     if (state == AppLifecycleState.resumed) {
-      controller.resume();
+      controller.resumeForLifecycle();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      controller.pause();
+      controller.pauseForLifecycle();
     }
   }
 

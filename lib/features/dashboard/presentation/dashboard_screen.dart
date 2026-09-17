@@ -49,16 +49,23 @@ class _OperatorDashboard extends ConsumerWidget {
                 onRetry: () => ref.invalidate(unitsProvider),
               ),
               data: (items) {
+                if (insights.isLoading) {
+                  return const AppLoading(label: 'Memuat ringkasan insight...');
+                }
+                if (insights.hasError) {
+                  return AppError(
+                    message: 'Ringkasan insight gagal dimuat.',
+                    onRetry: () => ref.invalidate(insightsProvider),
+                  );
+                }
                 final ordered = [...items]
                   ..sort(
                     (a, b) =>
                         _weight(b.condition).compareTo(_weight(a.condition)),
                   );
-                final active =
-                    insights.valueOrNull
-                        ?.where((item) => item.isActive)
-                        .length ??
-                    0;
+                final active = insights.requireValue
+                    .where((item) => item.isActive)
+                    .length;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -120,6 +127,7 @@ class _PartnerDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final requests = ref.watch(requestsProvider);
     final listings = ref.watch(listingsProvider);
+    final accountId = role.organizationId;
     return ListView(
       children: [
         _Hero(
@@ -141,7 +149,7 @@ class _PartnerDashboard extends ConsumerWidget {
                     Expanded(
                       child: _Summary(
                         value:
-                            '${items.where((e) => e.status == RequestStatus.pending).length}',
+                            '${items.where((e) => e.status == RequestStatus.pending && e.receiverId == accountId).length}',
                         label: 'Perlu ditinjau',
                       ),
                     ),
@@ -156,9 +164,33 @@ class _PartnerDashboard extends ConsumerWidget {
                   ],
                 ),
                 loading: () => const AppLoading(),
-                error: (_, _) => const SizedBox.shrink(),
+                error: (_, _) => AppError(
+                  message: 'Ringkasan pengajuan gagal dimuat.',
+                  onRetry: () => ref.invalidate(requestsProvider),
+                ),
               ),
               const SizedBox(height: 24),
+              requests.when(
+                data: (items) {
+                  final incoming = items.where(
+                    (item) =>
+                        item.status == RequestStatus.pending &&
+                        item.receiverId == accountId,
+                  );
+                  if (incoming.isEmpty) return const SizedBox.shrink();
+                  final item = incoming.first;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: FilledButton.icon(
+                      onPressed: () => context.push('/requests/${item.id}'),
+                      icon: const Icon(Icons.assignment_outlined),
+                      label: const Text('Tinjau pengajuan masuk'),
+                    ),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
               Text(
                 'Langkah berikutnya',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -205,7 +237,10 @@ class _PartnerDashboard extends ConsumerWidget {
                   '${items.where((e) => e.isActive).length} penawaran dan kebutuhan aktif di jaringan.',
                 ),
                 loading: () => const Text('Memuat aktivitas...'),
-                error: (_, _) => const Text('Aktivitas belum dapat dimuat.'),
+                error: (_, _) => AppError(
+                  message: 'Aktivitas mitra gagal dimuat.',
+                  onRetry: () => ref.invalidate(listingsProvider),
+                ),
               ),
             ],
           ),

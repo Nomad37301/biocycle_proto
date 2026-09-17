@@ -16,16 +16,37 @@ class SettingsScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Card(
-                child: ListTile(
-                  minVerticalPadding: 14,
-                  leading: const Icon(Icons.notifications_active_outlined),
-                  title: const Text('Aktifkan notifikasi'),
-                  subtitle: const Text(
-                    'Android akan meminta izin untuk menampilkan peringatan kondisi.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _permission(context, ref),
-                ),
+                child: ref
+                    .watch(notificationsEnabledProvider)
+                    .when(
+                      loading: () => const ListTile(
+                        title: Text('Memuat pengaturan notifikasi...'),
+                        trailing: CircularProgressIndicator(),
+                      ),
+                      error: (_, _) => ListTile(
+                        title: const Text('Pengaturan notifikasi gagal dimuat'),
+                        trailing: IconButton(
+                          tooltip: 'Coba lagi',
+                          onPressed: () =>
+                              ref.invalidate(notificationsEnabledProvider),
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ),
+                      data: (enabled) => SwitchListTile(
+                        secondary: const Icon(
+                          Icons.notifications_active_outlined,
+                        ),
+                        title: const Text('Notifikasi kondisi'),
+                        subtitle: Text(
+                          enabled
+                              ? 'Peringatan sensor baru akan ditampilkan oleh Android.'
+                              : 'Insight tetap tersimpan tanpa peringatan Android.',
+                        ),
+                        value: enabled,
+                        onChanged: (value) =>
+                            _setNotifications(context, ref, value),
+                      ),
+                    ),
               ),
               const SizedBox(height: 12),
               Card(
@@ -78,16 +99,25 @@ class SettingsScreen extends ConsumerWidget {
     ),
   );
 
-  Future<void> _permission(BuildContext context, WidgetRef ref) async {
-    final granted = await ref.read(notificationProvider).requestPermission();
+  Future<void> _setNotifications(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
+    final granted = enabled
+        ? await ref.read(notificationProvider).requestPermission()
+        : false;
     await ref
         .read(databaseProvider)
-        .setSetting('notifications_enabled', granted.toString());
+        .setSetting('notifications_enabled', (enabled && granted).toString());
+    ref.read(demoSessionProvider.notifier).refresh();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            granted
+            !enabled
+                ? 'Notifikasi dinonaktifkan.'
+                : granted
                 ? 'Notifikasi diaktifkan.'
                 : 'Izin tidak diberikan. Insight tetap tersedia di aplikasi.',
           ),
@@ -118,6 +148,7 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     await ref.read(demoSessionProvider.notifier).reset();
+    ref.read(partnerRevisionProvider.notifier).state++;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

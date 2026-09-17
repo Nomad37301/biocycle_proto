@@ -50,6 +50,34 @@ class InsightEvent {
   );
 }
 
+class InsightAction {
+  const InsightAction({
+    required this.id,
+    required this.insightId,
+    required this.completedSteps,
+    required this.note,
+    required this.createdAt,
+  });
+
+  final int id;
+  final int insightId;
+  final Set<int> completedSteps;
+  final String note;
+  final DateTime createdAt;
+
+  factory InsightAction.fromMap(Map<String, Object?> map) => InsightAction(
+    id: map['id']! as int,
+    insightId: map['insight_id']! as int,
+    completedSteps: (map['completed_steps']! as String)
+        .split(',')
+        .where((value) => value.isNotEmpty)
+        .map(int.parse)
+        .toSet(),
+    note: map['note']! as String,
+    createdAt: DateTime.parse(map['created_at']! as String),
+  );
+}
+
 const sopSteps = <String, List<String>>{
   'temperature': [
     'Periksa sirkulasi udara pada area budidaya.',

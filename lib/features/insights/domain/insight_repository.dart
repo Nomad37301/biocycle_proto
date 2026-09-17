@@ -10,6 +10,7 @@ class InsightUpdate {
 abstract interface class InsightRepository {
   Future<List<InsightEvent>> getInsights();
   Future<InsightEvent?> getInsight(int id);
+  Future<List<InsightAction>> getActions(int insightId);
   Future<InsightUpdate> evaluate(BsfUnit unit);
   Future<void> saveAction(int id, Set<int> steps, String note);
 }

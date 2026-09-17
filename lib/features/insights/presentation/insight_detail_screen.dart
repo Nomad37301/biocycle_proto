@@ -20,6 +20,7 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
   final noteController = TextEditingController();
   final completed = <int>{};
   bool seeded = false;
+  bool saving = false;
 
   @override
   void dispose() {
@@ -144,10 +145,24 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: _save,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Simpan catatan tindakan'),
+                onPressed: saving ? null : _save,
+                icon: saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(
+                  saving ? 'Menyimpan...' : 'Simpan catatan tindakan',
+                ),
               ),
+              const SizedBox(height: 28),
+              Text(
+                'Riwayat tindakan',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 10),
+              _actionHistory(),
               const SizedBox(height: 24),
             ],
           ),
@@ -157,16 +172,67 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
   }
 
   Future<void> _save() async {
-    await ref
-        .read(insightRepositoryProvider)
-        .saveAction(widget.insightId, completed, noteController.text);
-    ref.read(demoSessionProvider.notifier).refresh();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tindakan tersimpan pada riwayat demo.')),
-      );
+    setState(() => saving = true);
+    try {
+      await ref
+          .read(insightRepositoryProvider)
+          .saveAction(widget.insightId, completed, noteController.text);
+      ref.read(demoSessionProvider.notifier).refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tindakan tersimpan pada riwayat demo.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Tindakan gagal disimpan: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
     }
   }
+
+  Widget _actionHistory() => ref
+      .watch(insightActionsProvider(widget.insightId))
+      .when(
+        loading: () => const AppLoading(label: 'Memuat riwayat tindakan...'),
+        error: (_, _) => AppError(
+          message: 'Riwayat tindakan gagal dimuat.',
+          onRetry: () =>
+              ref.invalidate(insightActionsProvider(widget.insightId)),
+        ),
+        data: (items) => items.isEmpty
+            ? const Text('Belum ada tindakan yang disimpan.')
+            : Column(
+                children: items
+                    .map(
+                      (action) => Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                DateFormat('dd MMM yyyy, HH:mm')
+                                    .format(action.createdAt),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${action.completedSteps.length} langkah dicentang',
+                              ),
+                              if (action.note.isNotEmpty) Text(action.note),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+      );
 }
 
 class _RoleGuard extends StatelessWidget {

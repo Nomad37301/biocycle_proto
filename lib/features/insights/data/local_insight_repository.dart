@@ -27,6 +27,17 @@ class LocalInsightRepository implements InsightRepository {
   }
 
   @override
+  Future<List<InsightAction>> getActions(int insightId) async {
+    final rows = await _store.database.query(
+      'insight_actions',
+      where: 'insight_id = ?',
+      whereArgs: [insightId],
+      orderBy: 'created_at DESC, id DESC',
+    );
+    return rows.map(InsightAction.fromMap).toList();
+  }
+
+  @override
   Future<InsightUpdate> evaluate(BsfUnit unit) async {
     final condition = unit.condition;
     if (condition == UnitCondition.optimal) {
@@ -44,6 +55,12 @@ class LocalInsightRepository implements InsightRepository {
         'temperature',
       _ => 'humidity',
     };
+    await _store.database.update(
+      'insights',
+      {'resolved_at': DateTime.now().toIso8601String()},
+      where: 'unit_id = ? AND kind != ? AND resolved_at IS NULL',
+      whereArgs: [unit.id, kind],
+    );
     final severity = condition == UnitCondition.critical
         ? 'critical'
         : 'attention';
@@ -70,7 +87,8 @@ class LocalInsightRepository implements InsightRepository {
       });
     } else {
       id = active.first['id']! as int;
-      shouldNotify = active.first['severity'] != severity;
+      shouldNotify =
+          active.first['severity'] == 'attention' && severity == 'critical';
       await _store.database.update(
         'insights',
         {
@@ -107,15 +125,25 @@ class LocalInsightRepository implements InsightRepository {
   @override
   Future<void> saveAction(int id, Set<int> steps, String note) async {
     final sorted = steps.toList()..sort();
-    await _store.database.update(
-      'insights',
-      {
+    final now = DateTime.now().toIso8601String();
+    await _store.database.transaction((txn) async {
+      final count = await txn.update(
+        'insights',
+        {
+          'completed_steps': sorted.join(','),
+          'note': note.trim(),
+          'updated_at': now,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (count != 1) throw StateError('Insight tidak ditemukan.');
+      await txn.insert('insight_actions', {
+        'insight_id': id,
         'completed_steps': sorted.join(','),
         'note': note.trim(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+        'created_at': now,
+      });
+    });
   }
 }

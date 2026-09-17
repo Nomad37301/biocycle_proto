@@ -96,15 +96,13 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
               ],
             ),
             const SizedBox(height: 28),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Perubahan sensor',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                SegmentedButton<int>(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final title = Text(
+                  'Perubahan sensor',
+                  style: Theme.of(context).textTheme.titleLarge,
+                );
+                final selector = SegmentedButton<int>(
                   segments: const [
                     ButtonSegment(value: 1, label: Text('1j')),
                     ButtonSegment(value: 6, label: Text('6j')),
@@ -113,8 +111,20 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                   selected: {rangeHours},
                   onSelectionChanged: (value) =>
                       setState(() => rangeHours = value.first),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 480) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, const SizedBox(height: 10), selector],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    selector,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 6),
             Text('Suhu dan kelembapan dalam $rangeHours jam terakhir.'),

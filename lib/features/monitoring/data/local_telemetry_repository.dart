@@ -58,7 +58,9 @@ class LocalTelemetryRepository implements TelemetryRepository {
         'humidity': values.$2,
         'medium': values.$3,
         'is_connected': values.$4 ? 1 : 0,
-        'updated_at': now.toIso8601String(),
+        'updated_at': values.$4
+            ? now.toIso8601String()
+            : unit.updatedAt.toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [unitId],

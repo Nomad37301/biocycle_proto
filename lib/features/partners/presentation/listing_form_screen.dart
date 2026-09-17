@@ -13,6 +13,40 @@ class ListingFormScreen extends ConsumerStatefulWidget {
   ConsumerState<ListingFormScreen> createState() => _ListingFormScreenState();
 }
 
+class ListingEditScreen extends ConsumerWidget {
+  const ListingEditScreen({super.key, required this.listingId});
+  final int listingId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ref
+      .watch(listingProvider(listingId))
+      .when(
+        loading: () => const Scaffold(body: AppLoading()),
+        error: (_, _) => Scaffold(
+          appBar: AppBar(title: const Text('Ubah penawaran')),
+          body: AppError(
+            message: 'Penawaran gagal dimuat.',
+            onRetry: () => ref.invalidate(listingProvider(listingId)),
+          ),
+        ),
+        data: (item) {
+          if (item == null ||
+              item.ownerId !=
+                  ref.watch(demoSessionProvider).role.organizationId) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Ubah penawaran')),
+              body: const EmptyState(
+                icon: Icons.lock_outline,
+                title: 'Penawaran tidak dapat diubah',
+                message: 'Data mungkin sudah direset atau dimiliki akun lain.',
+              ),
+            );
+          }
+          return ListingFormScreen(initial: item);
+        },
+      );
+}
+
 class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   final formKey = GlobalKey<FormState>();
   final material = TextEditingController();
@@ -29,7 +63,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     final initial = widget.initial;
     if (initial != null) {
       material.text = initial.material;
-      quantity.text = initial.quantityKg.toStringAsFixed(0);
+      quantity.text = formatKg(initial.quantityKg);
       region.text = initial.region;
       note.text = initial.note;
       date = initial.availableDate;
@@ -99,9 +133,12 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                   decimal: true,
                 ),
                 decoration: const InputDecoration(labelText: 'Jumlah (kg)'),
-                validator: (value) => (double.tryParse(value ?? '') ?? 0) <= 0
-                    ? 'Masukkan jumlah lebih dari nol.'
-                    : null,
+                validator: (value) {
+                  final parsed = parseQuantity(value ?? '');
+                  return parsed == null || parsed <= 0
+                      ? 'Masukkan jumlah lebih dari nol.'
+                      : null;
+                },
               ),
               const SizedBox(height: 14),
               TextFormField(
@@ -175,7 +212,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
               ownerRole: role,
               kind: kind,
               material: selectedMaterial,
-              quantityKg: double.parse(quantity.text),
+              quantityKg: parseQuantity(quantity.text)!,
               availableDate: date,
               region: region.text,
               note: note.text,
@@ -185,15 +222,15 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
             .read(partnerRepositoryProvider)
             .updateListing(
               id: widget.initial!.id,
-              ownerRole: role,
+              ownerId: role.organizationId,
               material: selectedMaterial,
-              quantityKg: double.parse(quantity.text),
+              quantityKg: parseQuantity(quantity.text)!,
               availableDate: date,
               region: region.text,
               note: note.text,
             );
       }
-      ref.read(demoSessionProvider.notifier).refresh();
+      ref.read(partnerRevisionProvider.notifier).state++;
       if (mounted) Navigator.pop(context);
     } catch (error) {
       if (mounted) {

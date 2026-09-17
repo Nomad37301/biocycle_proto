@@ -87,14 +87,16 @@ class ListingsScreen extends ConsumerWidget {
 
   String _title(DemoRole role) {
     if (!ownedOnly) return 'Peluang kerja sama';
-    return role == DemoRole.supplier
-        ? 'Penawaran limbah'
-        : 'Kebutuhan hasil BSF';
+    return switch (role) {
+      DemoRole.supplier => 'Penawaran limbah',
+      DemoRole.operator => 'Penawaran hasil BSF',
+      DemoRole.buyer => 'Kebutuhan hasil BSF',
+    };
   }
 
   bool _visible(PartnerListing item, DemoRole role) {
-    if (ownedOnly) return item.ownerRole == role;
-    if (!item.isActive || item.ownerRole == role) return false;
+    if (ownedOnly) return item.ownerId == role.organizationId;
+    if (!item.isActive || item.ownerId == role.organizationId) return false;
     return switch (role) {
       DemoRole.operator =>
         item.kind == ListingKind.wasteOffer ||
@@ -129,7 +131,8 @@ class _ListingCard extends ConsumerWidget {
           ),
           const SizedBox(height: 5),
           Text(item.ownerName),
-          Text('${item.quantityKg.toStringAsFixed(0)} kg · ${item.region}'),
+          Text('${formatKg(item.quantityKg)} kg · ${item.region}'),
+          Text('Sisa ${formatKg(item.availableKg)} kg'),
           Text(
             'Tersedia ${DateFormat('dd MMM yyyy').format(item.availableDate)}',
           ),
@@ -138,13 +141,13 @@ class _ListingCard extends ConsumerWidget {
             Text(item.note),
           ],
           const SizedBox(height: 14),
-          if (item.ownerRole == currentRole && item.isActive)
+          if (item.ownerId == currentRole.organizationId && item.isActive)
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () =>
-                      context.push('/listings/${item.id}/edit', extra: item),
+                  onPressed: () => context.push('/listings/${item.id}/edit'),
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Ubah'),
                 ),
@@ -153,11 +156,21 @@ class _ListingCard extends ConsumerWidget {
                   icon: const Icon(Icons.archive_outlined),
                   label: const Text('Arsipkan'),
                 ),
+                if (currentRole == DemoRole.supplier)
+                  FilledButton.icon(
+                    onPressed: item.availableKg > 0
+                        ? () => _request(context, ref)
+                        : null,
+                    icon: const Icon(Icons.send_outlined),
+                    label: const Text('Tawarkan ke operator'),
+                  ),
               ],
             )
           else if (item.isActive)
             FilledButton(
-              onPressed: () => _request(context, ref),
+              onPressed: item.availableKg > 0
+                  ? () => _request(context, ref)
+                  : null,
               child: const Text('Ajukan kerja sama'),
             ),
         ],
@@ -168,25 +181,39 @@ class _ListingCard extends ConsumerWidget {
   Future<void> _archive(BuildContext context, WidgetRef ref) async {
     await ref
         .read(partnerRepositoryProvider)
-        .archiveListing(item.id, currentRole);
-    ref.read(demoSessionProvider.notifier).refresh();
+        .archiveListing(item.id, currentRole.organizationId);
+    ref.read(partnerRevisionProvider.notifier).state++;
   }
 
   Future<void> _request(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController(
-      text: item.quantityKg.toStringAsFixed(0),
-    );
+    final controller = TextEditingController(text: formatKg(item.availableKg));
+    final noteController = TextEditingController();
     final quantity = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Ajukan kerja sama'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Jumlah (kg)',
-            helperText: 'Maksimal ${item.quantityKg.toStringAsFixed(0)} kg',
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Jumlah (kg)',
+                helperText: 'Maksimal ${formatKg(item.availableKg)} kg',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Catatan untuk mitra (opsional)',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -195,27 +222,34 @@ class _ListingCard extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () =>
-                Navigator.pop(context, double.tryParse(controller.text)),
+                Navigator.pop(context, parseQuantity(controller.text)),
             child: const Text('Kirim pengajuan'),
           ),
         ],
       ),
     );
+    final note = noteController.text;
+    await Future<void>.delayed(kThemeAnimationDuration);
     controller.dispose();
+    noteController.dispose();
     if (quantity == null || !context.mounted) return;
     try {
-      await ref
+      final requestId = await ref
           .read(partnerRepositoryProvider)
-          .createRequest(item, currentRole, quantity);
-      ref.read(demoSessionProvider.notifier).refresh();
+          .createRequest(
+            listingId: item.id,
+            senderId: currentRole.organizationId,
+            receiverId:
+                currentRole == DemoRole.supplier &&
+                    item.ownerId == currentRole.organizationId
+                ? DemoRole.operator.organizationId
+                : item.ownerId,
+            quantityKg: quantity,
+            note: note,
+          );
+      ref.read(partnerRevisionProvider.notifier).state++;
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Pengajuan tersimpan. Pantau statusnya di tab Pengajuan.',
-            ),
-          ),
-        );
+        context.push('/requests/$requestId');
       }
     } catch (error) {
       if (context.mounted) {

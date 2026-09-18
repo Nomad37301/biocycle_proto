@@ -11,6 +11,8 @@ Future<void> bootstrap() async {
   final database = await AppDatabase.open();
   final notifications = NotificationService();
   final initialNotification = await notifications.initialize();
+  final showOnboarding =
+      await database.getSetting('onboarding_complete') != 'true';
   runApp(
     ProviderScope(
       overrides: [
@@ -18,7 +20,10 @@ Future<void> bootstrap() async {
         notificationProvider.overrideWithValue(notifications),
         initialNotificationProvider.overrideWithValue(initialNotification),
       ],
-      child: BioCycleApp(initialNotification: initialNotification),
+      child: BioCycleApp(
+        initialNotification: initialNotification,
+        showOnboarding: showOnboarding,
+      ),
     ),
   );
 }

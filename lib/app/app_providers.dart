@@ -48,6 +48,7 @@ final demoSessionProvider =
         ref.watch(telemetryRepositoryProvider),
         ref.watch(insightRepositoryProvider),
         ref.watch(notificationProvider),
+        ref.watch(partnerRepositoryProvider),
       );
     });
 
@@ -131,3 +132,110 @@ final requestHistoryProvider = FutureProvider.family<List<RequestHistory>, int>(
     return ref.watch(partnerRepositoryProvider).getRequestHistory(id);
   },
 );
+
+final partnerActivityProvider =
+    FutureProvider.family<PartnerActivitySummary, int>((ref, id) {
+      ref.watch(partnerRevisionProvider);
+      return ref.watch(partnerRepositoryProvider).getPartnerActivity(id);
+    });
+
+final networkFlowProvider = FutureProvider<NetworkFlowMetrics>((ref) {
+  ref.watch(partnerRevisionProvider);
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  return ref.watch(partnerRepositoryProvider).getNetworkFlow();
+});
+
+final unitSummaryProvider = FutureProvider.family<UnitSummary?, (int, int)>((
+  ref,
+  args,
+) {
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  return ref
+      .watch(telemetryRepositoryProvider)
+      .getSummary(args.$1, Duration(hours: args.$2));
+});
+
+class DashboardAttention {
+  const DashboardAttention({
+    required this.conditionEvents,
+    required this.incompleteSop,
+    required this.pendingRequests,
+    this.firstInsightId,
+    this.firstRequestId,
+  });
+  final int conditionEvents;
+  final int incompleteSop;
+  final int pendingRequests;
+  final int? firstInsightId;
+  final int? firstRequestId;
+}
+
+final dashboardAttentionProvider = FutureProvider<DashboardAttention>((
+  ref,
+) async {
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  ref.watch(partnerRevisionProvider);
+  final db = ref.watch(databaseProvider).database;
+  final since = DateTime.now()
+      .subtract(const Duration(hours: 24))
+      .toIso8601String();
+  final eventRows = await db.rawQuery(
+    "SELECT COUNT(*) AS total FROM condition_events WHERE occurred_at >= ? AND condition IN ('attention', 'critical')",
+    [since],
+  );
+  final insightRows = await db.rawQuery('''
+    SELECT id FROM insights
+    WHERE resolved_at IS NULL AND length(completed_steps) < 5
+    ORDER BY started_at LIMIT 100''');
+  final requestRows = await db.query(
+    'requests',
+    columns: ['id'],
+    where: "receiver_id = ? AND status = 'pending'",
+    whereArgs: [DemoRole.operator.organizationId],
+    orderBy: 'created_at',
+  );
+  return DashboardAttention(
+    conditionEvents: (eventRows.first['total'] as num).toInt(),
+    incompleteSop: insightRows.length,
+    pendingRequests: requestRows.length,
+    firstInsightId: insightRows.isEmpty ? null : insightRows.first['id'] as int,
+    firstRequestId: requestRows.isEmpty ? null : requestRows.first['id'] as int,
+  );
+});
+
+class DemoServicePlan {
+  const DemoServicePlan({
+    required this.status,
+    required this.startedAt,
+    required this.endsAt,
+  });
+  final String status;
+  final DateTime startedAt;
+  final DateTime endsAt;
+
+  String get effectiveStatus => DateTime.now().isAfter(endsAt)
+      ? 'kedaluwarsa'
+      : status == 'active'
+      ? 'aktif'
+      : 'trial';
+}
+
+final demoServicePlanProvider = FutureProvider<DemoServicePlan>((ref) async {
+  ref.watch(demoSessionProvider.select((state) => state.revision));
+  final store = ref.watch(databaseProvider);
+  final now = DateTime.now();
+  final savedStart = await store.getSetting('service_started_at');
+  final savedEnd = await store.getSetting('service_ends_at');
+  final status = await store.getSetting('service_status') ?? 'trial';
+  final startedAt = DateTime.tryParse(savedStart ?? '') ?? now;
+  final endsAt =
+      DateTime.tryParse(savedEnd ?? '') ?? now.add(const Duration(days: 14));
+  if (savedStart == null ||
+      savedStart.isEmpty ||
+      savedEnd == null ||
+      savedEnd.isEmpty) {
+    await store.setSetting('service_started_at', startedAt.toIso8601String());
+    await store.setSetting('service_ends_at', endsAt.toIso8601String());
+  }
+  return DemoServicePlan(status: status, startedAt: startedAt, endsAt: endsAt);
+});

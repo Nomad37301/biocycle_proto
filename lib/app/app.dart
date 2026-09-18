@@ -9,8 +9,13 @@ import 'routing/app_router.dart';
 import 'theme/app_theme.dart';
 
 class BioCycleApp extends ConsumerStatefulWidget {
-  const BioCycleApp({super.key, this.initialNotification});
+  const BioCycleApp({
+    super.key,
+    this.initialNotification,
+    required this.showOnboarding,
+  });
   final String? initialNotification;
+  final bool showOnboarding;
   @override
   ConsumerState<BioCycleApp> createState() => _BioCycleAppState();
 }
@@ -24,7 +29,11 @@ class _BioCycleAppState extends ConsumerState<BioCycleApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    router = buildRouter(initialLocation: widget.initialNotification ?? '/');
+    router = buildRouter(
+      initialLocation:
+          widget.initialNotification ??
+          (widget.showOnboarding ? '/onboarding' : '/'),
+    );
     tapSubscription = ref.read(notificationProvider).taps.listen(router.go);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(demoSessionProvider.notifier).start();

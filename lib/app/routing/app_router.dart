@@ -2,17 +2,25 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/insights/presentation/insight_detail_screen.dart';
 import '../../features/monitoring/presentation/unit_detail_screen.dart';
+import '../../features/monitoring/presentation/unit_summary_screen.dart';
 import '../../features/partners/presentation/listing_detail_screen.dart';
 import '../../features/partners/presentation/listing_form_screen.dart';
 import '../../features/partners/presentation/partner_detail_screen.dart';
 import '../../features/partners/presentation/request_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
 import 'app_shell.dart';
 
 GoRouter buildRouter({String initialLocation = '/'}) => GoRouter(
   initialLocation: initialLocation,
   routes: [
+    GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
     GoRoute(path: '/', builder: (_, _) => const AppShell()),
+    GoRoute(
+      path: '/units/:id/summary',
+      builder: (_, state) =>
+          UnitSummaryScreen(unitId: int.parse(state.pathParameters['id']!)),
+    ),
     GoRoute(
       path: '/units/:id',
       builder: (_, state) =>

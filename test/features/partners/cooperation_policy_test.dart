@@ -84,4 +84,31 @@ void main() {
     expect(parseQuantity('NaN'), isNull);
     expect(parseQuantity('Infinity'), isNull);
   });
+
+  test('penerimaan sebagian dibatasi pengajuan dan sisa listing', () {
+    expect(
+      CooperationPolicy.validAcceptedQuantity(
+        requested: 80,
+        accepted: 35,
+        available: 50,
+      ),
+      isTrue,
+    );
+    expect(
+      CooperationPolicy.validAcceptedQuantity(
+        requested: 80,
+        accepted: 60,
+        available: 50,
+      ),
+      isFalse,
+    );
+    expect(
+      CooperationPolicy.validAcceptedQuantity(
+        requested: 80,
+        accepted: 0,
+        available: 50,
+      ),
+      isFalse,
+    );
+  });
 }

@@ -36,5 +36,38 @@ void main() {
         UnitCondition.offline,
       );
     });
+
+    test('batas per unit mengubah evaluasi dan menolak konfigurasi rusak', () {
+      const thresholds = UnitThresholds(
+        temperatureAttention: 30,
+        temperatureCritical: 32,
+        humidityAttention: 70,
+        humidityCritical: 75,
+      );
+      expect(thresholds.isValid, isTrue);
+      expect(
+        DemoThresholds.evaluate(
+          temperature: 31,
+          humidity: 60,
+          connected: true,
+          thresholds: thresholds,
+        ),
+        UnitCondition.attention,
+      );
+      expect(
+        const UnitThresholds(
+          temperatureAttention: 38,
+          temperatureCritical: 34,
+        ).isValid,
+        isFalse,
+      );
+      expect(
+        const UnitThresholds(
+          humidityAttention: 80,
+          humidityCritical: 101,
+        ).isValid,
+        isFalse,
+      );
+    });
   });
 }

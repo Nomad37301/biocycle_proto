@@ -29,9 +29,37 @@ class DemoControls extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Skenario mengubah Unit Demo Utama dan berjalan setiap 5 detik saat aplikasi aktif.',
+              'Pilih satu unit untuk skenario. Unit lain tetap diperbarui setiap 5 detik dengan variasi normal berbeda.',
             ),
             const SizedBox(height: 18),
+            ref
+                .watch(unitsProvider)
+                .when(
+                  loading: () => const LinearProgressIndicator(),
+                  error: (_, _) => const Text('Daftar unit gagal dimuat.'),
+                  data: (units) => DropdownButtonFormField<int>(
+                    initialValue: state.selectedUnitId,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit skenario',
+                    ),
+                    items: units
+                        .map(
+                          (unit) => DropdownMenuItem(
+                            value: unit.id,
+                            child: Text(unit.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        ref
+                            .read(demoSessionProvider.notifier)
+                            .setSelectedUnit(value);
+                      }
+                    },
+                  ),
+                ),
+            const SizedBox(height: 14),
             ...DemoScenario.values.map(
               (scenario) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),

@@ -38,6 +38,7 @@ class DemoSessionState {
     this.revision = 0,
     this.running = false,
     this.manuallyPaused = false,
+    this.selectedUnitId = 1,
   });
 
   final DemoRole role;
@@ -45,6 +46,7 @@ class DemoSessionState {
   final int revision;
   final bool running;
   final bool manuallyPaused;
+  final int selectedUnitId;
 
   DemoSessionState copyWith({
     DemoRole? role,
@@ -52,11 +54,13 @@ class DemoSessionState {
     int? revision,
     bool? running,
     bool? manuallyPaused,
+    int? selectedUnitId,
   }) => DemoSessionState(
     role: role ?? this.role,
     scenario: scenario ?? this.scenario,
     revision: revision ?? this.revision,
     running: running ?? this.running,
     manuallyPaused: manuallyPaused ?? this.manuallyPaused,
+    selectedUnitId: selectedUnitId ?? this.selectedUnitId,
   );
 }

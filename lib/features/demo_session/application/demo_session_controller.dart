@@ -6,6 +6,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../insights/domain/insight_repository.dart';
 import '../../monitoring/domain/telemetry_repository.dart';
+import '../../monitoring/domain/telemetry_models.dart';
+import '../../partners/domain/partner_repository.dart';
 import '../domain/demo_session.dart';
 
 class DemoSessionController extends StateNotifier<DemoSessionState> {
@@ -14,12 +16,14 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     this._telemetry,
     this._insights,
     this._notifications,
+    this._partners,
   ) : super(const DemoSessionState());
 
   final AppDatabase _database;
   final TelemetryRepository _telemetry;
   final InsightRepository _insights;
   final NotificationService _notifications;
+  final PartnerRepository _partners;
   Timer? _timer;
   int _tick = 0;
   bool _settingsLoaded = false;
@@ -31,6 +35,7 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     _starting = true;
     try {
       await _loadSettings();
+      await _deliverPartnerNotifications(state.role.organizationId);
       if (!state.manuallyPaused) _startTimer();
     } finally {
       _starting = false;
@@ -43,6 +48,8 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     final savedRole = await _database.getSetting('active_role');
     final savedScenario = await _database.getSetting('demo_scenario');
     final paused = await _database.getSetting('simulator_paused') == 'true';
+    final selectedUnitId =
+        int.tryParse(await _database.getSetting('selected_unit_id') ?? '') ?? 1;
     final roles = DemoRole.values.where((item) => item.name == savedRole);
     final scenarios = DemoScenario.values.where(
       (item) => item.name == savedScenario,
@@ -51,6 +58,7 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
       role: roles.isEmpty ? DemoRole.operator : roles.first,
       scenario: scenarios.isEmpty ? DemoScenario.normal : scenarios.first,
       manuallyPaused: paused,
+      selectedUnitId: selectedUnitId,
     );
   }
 
@@ -86,15 +94,39 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     }
   }
 
-  void setRole(DemoRole role) {
+  Future<void> setRole(DemoRole role) async {
     state = state.copyWith(role: role);
-    unawaited(_database.setSetting('active_role', role.name));
+    await _database.setSetting('active_role', role.name);
+    await _deliverPartnerNotifications(role.organizationId);
+  }
+
+  Future<void> _deliverPartnerNotifications(int accountId) async {
+    final enabled =
+        await _database.getSetting('notifications_enabled') == 'true';
+    if (!enabled) return;
+    final items = await _partners.takePendingNotifications(accountId);
+    for (final item in items) {
+      try {
+        await _notifications.showPartner(
+          id: item.id,
+          title: item.title,
+          body: item.body,
+          payload: item.payload,
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> setScenario(DemoScenario scenario) async {
     state = state.copyWith(scenario: scenario);
     _tick = 0;
     await _database.setSetting('demo_scenario', scenario.name);
+    await _enqueueUpdate();
+  }
+
+  Future<void> setSelectedUnit(int unitId) async {
+    state = state.copyWith(selectedUnitId: unitId);
+    await _database.setSetting('selected_unit_id', '$unitId');
     await _enqueueUpdate();
   }
 
@@ -106,24 +138,41 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
 
   Future<void> _update() async {
     _tick++;
-    final unit = await _telemetry.recordScenario(1, state.scenario.name, _tick);
-    final update = await _insights.evaluate(unit);
+    final units = await _telemetry.getUnits();
     final enabled =
         await _database.getSetting('notifications_enabled') == 'true';
-    if (enabled && update.shouldNotify && update.event != null) {
-      try {
-        await _notifications.showInsight(
-          id: update.event!.id,
-          title:
-              '${update.event!.severity == 'critical' ? 'Kritis' : 'Perlu perhatian'}: ${unit.name}',
-          body: update.event!.cause,
-        );
-      } catch (_) {}
+    for (final source in units) {
+      final scenario = source.id == state.selectedUnitId
+          ? state.scenario.name
+          : DemoScenario.normal.name;
+      final unit = await _telemetry.recordScenario(
+        source.id,
+        scenario,
+        _tick + source.id,
+      );
+      final update = await _insights.evaluate(unit);
+      if (enabled && update.shouldNotify && update.event != null) {
+        try {
+          await _notifications.showInsight(
+            id: update.event!.id,
+            title:
+                '${update.event!.severity == 'critical' ? 'Kritis' : 'Perlu perhatian'}: ${unit.name}',
+            body: update.event!.cause,
+          );
+        } catch (_) {}
+      }
     }
     state = state.copyWith(revision: state.revision + 1);
   }
 
   void refresh() => state = state.copyWith(revision: state.revision + 1);
+
+  Future<void> updateThresholds(int unitId, UnitThresholds thresholds) async {
+    await _telemetry.updateThresholds(unitId, thresholds);
+    final unit = await _telemetry.getUnit(unitId);
+    if (unit != null) await _insights.evaluate(unit);
+    refresh();
+  }
 
   Future<void> reset() async {
     pauseForLifecycle();

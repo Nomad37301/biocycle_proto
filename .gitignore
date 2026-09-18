@@ -17,6 +17,8 @@ AGENTS.md
 plan.md
 report.md
 style.md
+master_folder/
+anti-slop/
 
 # IntelliJ related
 *.iml

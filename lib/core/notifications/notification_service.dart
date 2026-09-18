@@ -55,6 +55,29 @@ class NotificationService {
     );
   }
 
+  Future<void> showPartner({
+    required int id,
+    required String title,
+    required String body,
+    required String payload,
+  }) async {
+    await _plugin.show(
+      id: 100000 + id,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'biocycle_partners',
+          'Aktivitas kemitraan',
+          channelDescription: 'Perubahan pengajuan kerja sama lokal',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      payload: payload,
+    );
+  }
+
   Future<void> cancelAll() => _plugin.cancelAll();
   void dispose() => _taps.close();
 }

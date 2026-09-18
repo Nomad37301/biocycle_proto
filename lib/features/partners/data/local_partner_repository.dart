@@ -12,7 +12,7 @@ class LocalPartnerRepository implements PartnerRepository {
   static const _listingSelect = '''
     SELECT l.*,
       MAX(0, l.quantity_kg - COALESCE((
-        SELECT SUM(r.quantity_kg) FROM requests r
+        SELECT SUM(COALESCE(r.accepted_quantity_kg, r.quantity_kg)) FROM requests r
         WHERE r.listing_id = l.id AND r.status IN ('accepted', 'completed')
       ), 0)) AS available_kg
     FROM listings l''';
@@ -85,6 +85,77 @@ class LocalPartnerRepository implements PartnerRepository {
   }
 
   @override
+  Future<PartnerActivitySummary> getPartnerActivity(int partnerId) async {
+    final rows = await _store.database.rawQuery(
+      '''
+      SELECT COUNT(*) AS completed_count,
+        COALESCE(SUM(COALESCE(accepted_quantity_kg, quantity_kg)), 0) AS total_kg,
+        MAX(updated_at) AS last_request_at
+      FROM requests
+      WHERE status = 'completed' AND (sender_id = ? OR receiver_id = ?)''',
+      [partnerId, partnerId],
+    );
+    final listingRows = await _store.database.rawQuery(
+      "SELECT MAX(created_at) AS last_listing_at FROM listings WHERE owner_id = ? AND created_at != ''",
+      [partnerId],
+    );
+    final requestAt = rows.first['last_request_at'] as String?;
+    final listingAt = listingRows.first['last_listing_at'] as String?;
+    final candidates = [
+      requestAt,
+      listingAt,
+    ].whereType<String>().map(DateTime.parse).toList()..sort();
+    return PartnerActivitySummary(
+      completedTransactions: (rows.first['completed_count'] as num).toInt(),
+      totalKg: (rows.first['total_kg'] as num).toDouble(),
+      lastActivityAt: candidates.isEmpty ? null : candidates.last,
+    );
+  }
+
+  @override
+  Future<NetworkFlowMetrics> getNetworkFlow() async {
+    final rows = await _store.database.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN l.kind = 'wasteOffer'
+          THEN COALESCE(r.accepted_quantity_kg, r.quantity_kg) ELSE 0 END), 0) AS waste_in,
+        COALESCE(SUM(CASE WHEN l.kind IN ('outputOffer', 'outputNeed')
+          THEN COALESCE(r.accepted_quantity_kg, r.quantity_kg) ELSE 0 END), 0) AS output
+      FROM requests r JOIN listings l ON l.id = r.listing_id
+      WHERE r.status = 'completed' ''');
+    final unitRows = await _store.database.rawQuery(
+      'SELECT COUNT(*) AS total FROM units',
+    );
+    return NetworkFlowMetrics(
+      wasteInKg: (rows.first['waste_in'] as num).toDouble(),
+      outputKg: (rows.first['output'] as num).toDouble(),
+      monitoredUnits: (unitRows.first['total'] as num).toInt(),
+    );
+  }
+
+  @override
+  Future<List<AppNotificationEntry>> takePendingNotifications(
+    int accountId,
+  ) async {
+    return _store.database.transaction((txn) async {
+      final rows = await txn.query(
+        'app_notifications',
+        where: 'account_id = ? AND delivered_at IS NULL',
+        whereArgs: [accountId],
+        orderBy: 'created_at, id',
+      );
+      if (rows.isNotEmpty) {
+        await txn.update(
+          'app_notifications',
+          {'delivered_at': DateTime.now().toIso8601String()},
+          where: 'account_id = ? AND delivered_at IS NULL',
+          whereArgs: [accountId],
+        );
+      }
+      return rows.map(AppNotificationEntry.fromMap).toList();
+    });
+  }
+
+  @override
   Future<int> createListing({
     required DemoRole ownerRole,
     required ListingKind kind,
@@ -114,6 +185,7 @@ class LocalPartnerRepository implements PartnerRepository {
       'region': region.trim(),
       'note': note.trim(),
       'is_active': 1,
+      'created_at': DateTime.now().toIso8601String(),
     });
   }
 
@@ -229,6 +301,9 @@ class LocalPartnerRepository implements PartnerRepository {
         'receiver_name': receiver.name,
         'summary': '${listing.kind.label}: ${listing.material}',
         'quantity_kg': quantityKg,
+        'initial_quantity_kg': quantityKg,
+        'accepted_quantity_kg': null,
+        'history_limited': 0,
         'note': note.trim(),
         'status': RequestStatus.pending.name,
         'created_at': now,
@@ -242,6 +317,15 @@ class LocalPartnerRepository implements PartnerRepository {
         note.trim(),
         now,
       );
+      await _addNotification(
+        txn,
+        accountId: receiverId,
+        requestId: id,
+        kind: 'incoming',
+        title: 'Pengajuan kerja sama masuk',
+        body: '${sender.name} mengajukan ${formatKg(quantityKg)} kg.',
+        now: now,
+      );
       return id;
     });
   }
@@ -252,6 +336,7 @@ class LocalPartnerRepository implements PartnerRepository {
     required RequestStatus next,
     required int actorId,
     String note = '',
+    double? acceptedQuantityKg,
   }) async {
     await _store.database.transaction((txn) async {
       final rows = await txn.query(
@@ -283,20 +368,57 @@ class LocalPartnerRepository implements PartnerRepository {
         final available =
             listing.quantityKg -
             await _committedQuantity(txn, request.listingId);
-        if (request.quantityKg > available) {
+        final accepted = acceptedQuantityKg ?? request.initialQuantityKg;
+        if (!accepted.isFinite || accepted <= 0) {
+          throw ArgumentError('Jumlah diterima harus lebih dari nol.');
+        }
+        if (accepted > request.initialQuantityKg) {
+          throw ArgumentError('Jumlah diterima melebihi jumlah pengajuan.');
+        }
+        if (!CooperationPolicy.validAcceptedQuantity(
+          requested: request.initialQuantityKg,
+          accepted: accepted,
+          available: available,
+        )) {
           throw StateError('Sisa penawaran tidak lagi mencukupi.');
         }
       }
       final actor = await _loadPartner(txn, actorId);
       if (actor == null) throw StateError('Akun tidak ditemukan.');
       final now = DateTime.now().toIso8601String();
+      final accepted = next == RequestStatus.accepted
+          ? acceptedQuantityKg ?? request.initialQuantityKg
+          : request.acceptedQuantityKg;
       await txn.update(
         'requests',
-        {'status': next.name, 'updated_at': now},
+        {
+          'status': next.name,
+          'accepted_quantity_kg': accepted,
+          'updated_at': now,
+        },
         where: 'id = ?',
         whereArgs: [id],
       );
       await _addHistory(txn, id, actor, next, note.trim(), now);
+      final targetId = actorId == request.senderId
+          ? request.receiverId
+          : request.senderId;
+      final title = switch (next) {
+        RequestStatus.accepted => 'Pengajuan diterima',
+        RequestStatus.rejected => 'Pengajuan ditolak',
+        RequestStatus.completed => 'Kerja sama selesai',
+        RequestStatus.cancelled => 'Pengajuan dibatalkan',
+        RequestStatus.pending => 'Pembaruan pengajuan',
+      };
+      await _addNotification(
+        txn,
+        accountId: targetId,
+        requestId: id,
+        kind: next.name,
+        title: title,
+        body: '${request.summary}. Buka untuk melihat rincian.',
+        now: now,
+      );
     });
   }
 
@@ -357,7 +479,7 @@ class LocalPartnerRepository implements PartnerRepository {
   }) async {
     final statuses = completedOnly ? "'completed'" : "'accepted', 'completed'";
     final rows = await db.rawQuery(
-      'SELECT COALESCE(SUM(quantity_kg), 0) AS total FROM requests '
+      'SELECT COALESCE(SUM(COALESCE(accepted_quantity_kg, quantity_kg)), 0) AS total FROM requests '
       'WHERE listing_id = ? AND status IN ($statuses)',
       [listingId],
     );
@@ -394,6 +516,26 @@ class LocalPartnerRepository implements PartnerRepository {
       'status': status.name,
       'note': note,
       'created_at': createdAt,
+    });
+  }
+
+  Future<void> _addNotification(
+    DatabaseExecutor db, {
+    required int accountId,
+    required int requestId,
+    required String kind,
+    required String title,
+    required String body,
+    required String now,
+  }) async {
+    await db.insert('app_notifications', {
+      'account_id': accountId,
+      'request_id': requestId,
+      'kind': kind,
+      'title': title,
+      'body': body,
+      'payload': '/requests/$requestId',
+      'created_at': now,
     });
   }
 }

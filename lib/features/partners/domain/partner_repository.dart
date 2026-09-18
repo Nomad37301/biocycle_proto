@@ -9,6 +9,9 @@ abstract interface class PartnerRepository {
   Future<List<CooperationRequest>> getRequests(int organizationId);
   Future<CooperationRequest?> getRequest(int id);
   Future<List<RequestHistory>> getRequestHistory(int requestId);
+  Future<PartnerActivitySummary> getPartnerActivity(int partnerId);
+  Future<NetworkFlowMetrics> getNetworkFlow();
+  Future<List<AppNotificationEntry>> takePendingNotifications(int accountId);
   Future<int> createListing({
     required DemoRole ownerRole,
     required ListingKind kind,
@@ -40,5 +43,6 @@ abstract interface class PartnerRepository {
     required RequestStatus next,
     required int actorId,
     String note = '',
+    double? acceptedQuantityKg,
   });
 }

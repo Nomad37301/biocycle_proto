@@ -112,6 +112,9 @@ class CooperationRequest {
     required this.receiverName,
     required this.summary,
     required this.quantityKg,
+    required this.initialQuantityKg,
+    required this.acceptedQuantityKg,
+    required this.historyLimited,
     required this.note,
     required this.status,
     required this.createdAt,
@@ -128,6 +131,10 @@ class CooperationRequest {
   final String receiverName;
   final String summary;
   final double quantityKg;
+  final double initialQuantityKg;
+  final double? acceptedQuantityKg;
+  final bool historyLimited;
+  double get committedQuantityKg => acceptedQuantityKg ?? quantityKg;
   final String note;
   final RequestStatus status;
   final DateTime createdAt;
@@ -146,10 +153,64 @@ class CooperationRequest {
         receiverName: map['receiver_name']! as String,
         summary: map['summary']! as String,
         quantityKg: (map['quantity_kg']! as num).toDouble(),
+        initialQuantityKg:
+            ((map['initial_quantity_kg'] ?? map['quantity_kg'])! as num)
+                .toDouble(),
+        acceptedQuantityKg: (map['accepted_quantity_kg'] as num?)?.toDouble(),
+        historyLimited: (map['history_limited'] as int?) == 1,
         note: (map['note'] as String?) ?? '',
         status: RequestStatus.values.byName(map['status']! as String),
         createdAt: DateTime.parse(map['created_at']! as String),
         updatedAt: DateTime.parse(map['updated_at']! as String),
+      );
+}
+
+class PartnerActivitySummary {
+  const PartnerActivitySummary({
+    required this.completedTransactions,
+    required this.totalKg,
+    required this.lastActivityAt,
+  });
+  final int completedTransactions;
+  final double totalKg;
+  final DateTime? lastActivityAt;
+}
+
+class NetworkFlowMetrics {
+  const NetworkFlowMetrics({
+    required this.wasteInKg,
+    required this.outputKg,
+    required this.monitoredUnits,
+  });
+  final double wasteInKg;
+  final double outputKg;
+  final int monitoredUnits;
+}
+
+class AppNotificationEntry {
+  const AppNotificationEntry({
+    required this.id,
+    required this.accountId,
+    required this.title,
+    required this.body,
+    required this.payload,
+    required this.createdAt,
+  });
+  final int id;
+  final int accountId;
+  final String title;
+  final String body;
+  final String payload;
+  final DateTime createdAt;
+
+  factory AppNotificationEntry.fromMap(Map<String, Object?> map) =>
+      AppNotificationEntry(
+        id: map['id']! as int,
+        accountId: map['account_id']! as int,
+        title: map['title']! as String,
+        body: map['body']! as String,
+        payload: map['payload']! as String,
+        createdAt: DateTime.parse(map['created_at']! as String),
       );
 }
 
@@ -220,4 +281,16 @@ abstract final class CooperationPolicy {
       (total - committed.fold<double>(0, (sum, value) => sum + value))
           .clamp(0, double.infinity)
           .toDouble();
+
+  static bool validAcceptedQuantity({
+    required double requested,
+    required double accepted,
+    required double available,
+  }) =>
+      requested.isFinite &&
+      accepted.isFinite &&
+      available.isFinite &&
+      accepted > 0 &&
+      accepted <= requested &&
+      accepted <= available;
 }

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/app_database.dart';
+import '../../core/database/database_initializer.dart';
 import '../../core/notifications/notification_service.dart';
 import '../app.dart';
 import '../app_providers.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initDatabasePlatform();
   final database = await AppDatabase.open();
   final notifications = NotificationService();
   final initialNotification = await notifications.initialize();

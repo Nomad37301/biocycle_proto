@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -6,9 +7,15 @@ class AppDatabase {
   final Database database;
 
   static Future<AppDatabase> open() async {
-    final root = await getDatabasesPath();
+    final String path;
+    if (kIsWeb) {
+      path = 'biocycle_demo.db';
+    } else {
+      final root = await getDatabasesPath();
+      path = p.join(root, 'biocycle_demo.db');
+    }
     final database = await openDatabase(
-      p.join(root, 'biocycle_demo.db'),
+      path,
       version: 5,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) async {

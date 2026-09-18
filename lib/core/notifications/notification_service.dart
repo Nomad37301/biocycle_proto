@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -9,7 +10,13 @@ class NotificationService {
 
   Stream<String> get taps => _taps.stream;
 
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   Future<String?> initialize() async {
+    if (!_isMobile) return null;
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -26,6 +33,7 @@ class NotificationService {
   }
 
   Future<bool> requestPermission() async {
+    if (!_isMobile) return true;
     final android = _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
@@ -38,6 +46,7 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (!_isMobile) return;
     await _plugin.show(
       id: id,
       title: title,
@@ -61,6 +70,7 @@ class NotificationService {
     required String body,
     required String payload,
   }) async {
+    if (!_isMobile) return;
     await _plugin.show(
       id: 100000 + id,
       title: title,
@@ -78,6 +88,9 @@ class NotificationService {
     );
   }
 
-  Future<void> cancelAll() => _plugin.cancelAll();
+  Future<void> cancelAll() async {
+    if (!_isMobile) return;
+    await _plugin.cancelAll();
+  }
   void dispose() => _taps.close();
 }

@@ -9,7 +9,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     final database = await openDatabase(
       p.join(root, 'biocycle_demo.db'),
-      version: 3,
+      version: 5,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) async {
         await _createSchema(db);
@@ -21,6 +21,8 @@ class AppDatabase {
           await _seedSettings(db);
         }
         if (oldVersion < 3) await _migrateToV3(db);
+        if (oldVersion < 4) await _migrateToV4(db);
+        if (oldVersion < 5) await _migrateToV5(db);
       },
     );
     return AppDatabase._(database);
@@ -30,7 +32,12 @@ class AppDatabase {
     await db.execute('''CREATE TABLE units(
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, kit_code TEXT NOT NULL,
       temperature REAL NOT NULL, humidity REAL NOT NULL, medium TEXT NOT NULL,
-      is_connected INTEGER NOT NULL, updated_at TEXT NOT NULL)''');
+      is_connected INTEGER NOT NULL, updated_at TEXT NOT NULL,
+      last_synced_at TEXT, firmware TEXT NOT NULL DEFAULT 'Simulasi 1.0.0',
+      temperature_attention REAL NOT NULL DEFAULT 34,
+      temperature_critical REAL NOT NULL DEFAULT 38,
+      humidity_attention REAL NOT NULL DEFAULT 80,
+      humidity_critical REAL NOT NULL DEFAULT 90)''');
     await db.execute('''CREATE TABLE readings(
       id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL,
       temperature REAL NOT NULL, humidity REAL NOT NULL, medium TEXT NOT NULL,
@@ -46,6 +53,8 @@ class AppDatabase {
     await db.execute('''CREATE TABLE insight_actions(
       id INTEGER PRIMARY KEY AUTOINCREMENT, insight_id INTEGER NOT NULL,
       completed_steps TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL,
+      before_temperature REAL, before_humidity REAL, before_recorded_at TEXT,
+      after_temperature REAL, after_humidity REAL, after_recorded_at TEXT,
       FOREIGN KEY(insight_id) REFERENCES insights(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE partners(
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL,
@@ -60,7 +69,7 @@ class AppDatabase {
       owner_role TEXT NOT NULL, owner_name TEXT NOT NULL, kind TEXT NOT NULL,
       material TEXT NOT NULL, quantity_kg REAL NOT NULL,
       available_date TEXT NOT NULL, region TEXT NOT NULL, note TEXT NOT NULL,
-      is_active INTEGER NOT NULL)''');
+      is_active INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT '')''');
     await db.execute(
       '''CREATE TABLE requests(
       id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL,
@@ -68,7 +77,9 @@ class AppDatabase {
       completion_id INTEGER NOT NULL, sender_role TEXT NOT NULL,
       receiver_role TEXT NOT NULL, sender_name TEXT NOT NULL,
       receiver_name TEXT NOT NULL, summary TEXT NOT NULL,
-      quantity_kg REAL NOT NULL, note TEXT NOT NULL DEFAULT '',
+      quantity_kg REAL NOT NULL, initial_quantity_kg REAL NOT NULL DEFAULT 0,
+      accepted_quantity_kg REAL, history_limited INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)''',
     );
     await db.execute('''CREATE TABLE request_history(
@@ -79,6 +90,14 @@ class AppDatabase {
     await db.execute(
       'CREATE INDEX request_listing_status ON requests(listing_id, status)',
     );
+    await db.execute('''CREATE TABLE app_notifications(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL,
+      request_id INTEGER, kind TEXT NOT NULL, title TEXT NOT NULL,
+      body TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL,
+      delivered_at TEXT)''');
+    await db.execute('''CREATE TABLE condition_events(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL,
+      condition TEXT NOT NULL, occurred_at TEXT NOT NULL)''');
   }
 
   static Future<void> _createSettingsTable(DatabaseExecutor db) async {
@@ -147,6 +166,104 @@ class AppDatabase {
     await _seedSettings(db);
   }
 
+  static Future<void> _migrateToV4(Database db) async {
+    await _addColumnIfMissing(db, 'units', 'last_synced_at', 'TEXT');
+    await _addColumnIfMissing(
+      db,
+      'units',
+      'firmware',
+      "TEXT NOT NULL DEFAULT 'Simulasi 1.0.0'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'units',
+      'temperature_attention',
+      'REAL NOT NULL DEFAULT 34',
+    );
+    await _addColumnIfMissing(
+      db,
+      'units',
+      'temperature_critical',
+      'REAL NOT NULL DEFAULT 38',
+    );
+    await _addColumnIfMissing(
+      db,
+      'units',
+      'humidity_attention',
+      'REAL NOT NULL DEFAULT 80',
+    );
+    await _addColumnIfMissing(
+      db,
+      'units',
+      'humidity_critical',
+      'REAL NOT NULL DEFAULT 90',
+    );
+    await _addColumnIfMissing(db, 'requests', 'initial_quantity_kg', 'REAL');
+    await _addColumnIfMissing(db, 'requests', 'accepted_quantity_kg', 'REAL');
+    await _addColumnIfMissing(
+      db,
+      'requests',
+      'history_limited',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    for (final column in const [
+      'before_temperature',
+      'before_humidity',
+      'after_temperature',
+      'after_humidity',
+    ]) {
+      await _addColumnIfMissing(db, 'insight_actions', column, 'REAL');
+    }
+    for (final column in const ['before_recorded_at', 'after_recorded_at']) {
+      await _addColumnIfMissing(db, 'insight_actions', column, 'TEXT');
+    }
+    await db.execute(
+      'UPDATE units SET last_synced_at = updated_at WHERE last_synced_at IS NULL',
+    );
+    await db.execute(
+      'UPDATE requests SET initial_quantity_kg = quantity_kg '
+      'WHERE initial_quantity_kg IS NULL OR initial_quantity_kg <= 0',
+    );
+    await db.execute(
+      "UPDATE requests SET accepted_quantity_kg = quantity_kg "
+      "WHERE accepted_quantity_kg IS NULL AND status IN ('accepted', 'completed')",
+    );
+    await db.execute('UPDATE requests SET history_limited = 1');
+    await db.execute('''CREATE TABLE IF NOT EXISTS app_notifications(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL,
+      request_id INTEGER, kind TEXT NOT NULL, title TEXT NOT NULL,
+      body TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL,
+      delivered_at TEXT)''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS condition_events(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, unit_id INTEGER NOT NULL,
+      condition TEXT NOT NULL, occurred_at TEXT NOT NULL)''');
+    await _seedNewSettings(db);
+  }
+
+  static Future<void> _migrateToV5(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'listings',
+      'created_at',
+      "TEXT NOT NULL DEFAULT ''",
+    );
+    await db.execute(
+      'UPDATE listings SET created_at = ? WHERE created_at IS NULL OR created_at = ?',
+      [DateTime.now().toIso8601String(), ''],
+    );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String declaration,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((item) => item['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $declaration');
+  }
+
   static Future<void> _seed(DatabaseExecutor db) async {
     final now = DateTime.now();
     final units = [
@@ -164,6 +281,8 @@ class AppDatabase {
         'medium': unit[5],
         'is_connected': 1,
         'updated_at': now.toIso8601String(),
+        'last_synced_at': now.toIso8601String(),
+        'firmware': 'Simulasi 1.0.0',
       });
       for (var index = 23; index >= 0; index--) {
         await db.insert('readings', {
@@ -201,6 +320,26 @@ class AppDatabase {
       'notifications_enabled': 'false',
       'demo_scenario': 'normal',
       'simulator_paused': 'false',
+      'selected_unit_id': '1',
+      'onboarding_complete': 'false',
+      'service_status': 'trial',
+      'service_started_at': '',
+      'service_ends_at': '',
+    }.entries) {
+      await db.insert('settings', {
+        'key': entry.key,
+        'value': entry.value,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
+  static Future<void> _seedNewSettings(DatabaseExecutor db) async {
+    for (final entry in const {
+      'selected_unit_id': '1',
+      'onboarding_complete': 'false',
+      'service_status': 'trial',
+      'service_started_at': '',
+      'service_ends_at': '',
     }.entries) {
       await db.insert('settings', {
         'key': entry.key,
@@ -264,6 +403,7 @@ class AppDatabase {
         'region': item[6],
         'note': item[7],
         'is_active': 1,
+        'created_at': now.toIso8601String(),
       });
     }
   }
@@ -272,6 +412,8 @@ class AppDatabase {
     await database.transaction((txn) async {
       for (final table in [
         'request_history',
+        'app_notifications',
+        'condition_events',
         'requests',
         'listings',
         'insight_actions',

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../shared/widgets/async_content.dart';
+import '../../demo_session/domain/demo_session.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -39,14 +42,73 @@ class SettingsScreen extends ConsumerWidget {
                         title: const Text('Notifikasi kondisi'),
                         subtitle: Text(
                           enabled
-                              ? 'Peringatan sensor baru akan ditampilkan oleh Android.'
-                              : 'Insight tetap tersimpan tanpa peringatan Android.',
+                              ? 'Peringatan sensor dan aktivitas kemitraan ditampilkan oleh Android.'
+                              : 'Insight dan aktivitas tetap tersimpan tanpa peringatan Android.',
                         ),
                         value: enabled,
                         onChanged: (value) =>
                             _setNotifications(context, ref, value),
                       ),
                     ),
+              ),
+              const SizedBox(height: 12),
+              if (ref.watch(demoSessionProvider).role == DemoRole.operator) ...[
+                ref
+                    .watch(demoServicePlanProvider)
+                    .when(
+                      loading: () => const Card(
+                        child: AppLoading(label: 'Memuat layanan...'),
+                      ),
+                      error: (_, _) => AppError(
+                        message: 'Status layanan gagal dimuat.',
+                        onRetry: () => ref.invalidate(demoServicePlanProvider),
+                      ),
+                      data: (plan) => Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Paket operator',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 6),
+                              const Text('Rp299.000/bulan'),
+                              Text('Status: ${plan.effectiveStatus}'),
+                              Text(
+                                'Mulai: ${DateFormat('dd MMM yyyy').format(plan.startedAt)}',
+                              ),
+                              Text(
+                                'Berakhir: ${DateFormat('dd MMM yyyy').format(plan.endsAt)}',
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Aktivasi ini hanya simulasi 30 hari. Tidak ada pembayaran dan fitur tidak dibatasi.',
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton(
+                                onPressed: () => _activateDemo(ref),
+                                child: const Text('Aktifkan demo 30 hari'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                const SizedBox(height: 12),
+              ],
+              Card(
+                child: ListTile(
+                  minVerticalPadding: 14,
+                  leading: const Icon(Icons.slideshow_outlined),
+                  title: const Text('Ulangi onboarding'),
+                  subtitle: const Text(
+                    'Buka lagi panduan Smart Kit, Dashboard, dan Insight.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/onboarding'),
+                ),
               ),
               const SizedBox(height: 12),
               Card(
@@ -104,13 +166,15 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     bool enabled,
   ) async {
-    final granted = enabled
-        ? await ref.read(notificationProvider).requestPermission()
-        : false;
-    await ref
-        .read(databaseProvider)
-        .setSetting('notifications_enabled', (enabled && granted).toString());
-    ref.read(demoSessionProvider.notifier).refresh();
+    final notifications = ref.read(notificationProvider);
+    final store = ref.read(databaseProvider);
+    final session = ref.read(demoSessionProvider.notifier);
+    final granted = enabled ? await notifications.requestPermission() : false;
+    await store.setSetting(
+      'notifications_enabled',
+      (enabled && granted).toString(),
+    );
+    session.refresh();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -147,8 +211,10 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(demoSessionProvider.notifier).reset();
-    ref.read(partnerRevisionProvider.notifier).state++;
+    final session = ref.read(demoSessionProvider.notifier);
+    final partnerRevision = ref.read(partnerRevisionProvider.notifier);
+    await session.reset();
+    partnerRevision.state++;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -156,5 +222,17 @@ class SettingsScreen extends ConsumerWidget {
         ),
       );
     }
+  }
+
+  Future<void> _activateDemo(WidgetRef ref) async {
+    final now = DateTime.now();
+    final store = ref.read(databaseProvider);
+    await store.setSetting('service_status', 'active');
+    await store.setSetting('service_started_at', now.toIso8601String());
+    await store.setSetting(
+      'service_ends_at',
+      now.add(const Duration(days: 30)).toIso8601String(),
+    );
+    ref.read(demoSessionProvider.notifier).refresh();
   }
 }

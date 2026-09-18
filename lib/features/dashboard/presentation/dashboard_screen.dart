@@ -88,6 +88,120 @@ class _OperatorDashboard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
+                      'Alur material tercatat',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    ref
+                        .watch(networkFlowProvider)
+                        .when(
+                          loading: () => const AppLoading(
+                            label: 'Menghitung transaksi selesai...',
+                          ),
+                          error: (_, _) => AppError(
+                            message: 'Alur material gagal dihitung.',
+                            onRetry: () => ref.invalidate(networkFlowProvider),
+                          ),
+                          data: (flow) => Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _FlowStep(
+                                      value: '${formatKg(flow.wasteInKg)} kg',
+                                      label: 'Limbah masuk',
+                                    ),
+                                  ),
+                                  const Icon(Icons.chevron_right),
+                                  Expanded(
+                                    child: _FlowStep(
+                                      value: '${flow.monitoredUnits} unit',
+                                      label: 'Budidaya BSF',
+                                    ),
+                                  ),
+                                  const Icon(Icons.chevron_right),
+                                  Expanded(
+                                    child: _FlowStep(
+                                      value: '${formatKg(flow.outputKg)} kg',
+                                      label: 'Hasil keluar',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Kg berasal dari transaksi selesai. Bagian budidaya hanya menunjukkan unit terpantau, bukan rasio konversi.',
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Perlu ditindaklanjuti',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    ref
+                        .watch(dashboardAttentionProvider)
+                        .when(
+                          loading: () => const AppLoading(
+                            label: 'Memeriksa tindak lanjut...',
+                          ),
+                          error: (_, _) => AppError(
+                            message: 'Tindak lanjut gagal dimuat.',
+                            onRetry: () =>
+                                ref.invalidate(dashboardAttentionProvider),
+                          ),
+                          data: (attention) => Card(
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.timeline),
+                                  title: Text(
+                                    '${attention.conditionEvents} kejadian sensor dalam 24 jam',
+                                  ),
+                                  subtitle: const Text(
+                                    'Mencakup kondisi perlu perhatian dan kritis.',
+                                  ),
+                                  onTap:
+                                      ordered.isEmpty ||
+                                          attention.conditionEvents == 0
+                                      ? null
+                                      : () => context.push(
+                                          '/units/${ordered.first.id}',
+                                        ),
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.checklist),
+                                  title: Text(
+                                    '${attention.incompleteSop} SOP aktif belum lengkap',
+                                  ),
+                                  onTap: attention.firstInsightId == null
+                                      ? null
+                                      : () => context.push(
+                                          '/insights/${attention.firstInsightId}',
+                                        ),
+                                ),
+                                ListTile(
+                                  leading: const Icon(
+                                    Icons.assignment_outlined,
+                                  ),
+                                  title: Text(
+                                    '${attention.pendingRequests} pengajuan menunggu respons',
+                                  ),
+                                  onTap: attention.firstRequestId == null
+                                      ? null
+                                      : () => context.push(
+                                          '/requests/${attention.firstRequestId}',
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    const SizedBox(height: 24),
+                    Text(
                       'Prioritas unit',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
@@ -309,5 +423,23 @@ class _Summary extends StatelessWidget {
         Text(label),
       ],
     ),
+  );
+}
+
+class _FlowStep extends StatelessWidget {
+  const _FlowStep({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        value,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      Text(label, textAlign: TextAlign.center),
+    ],
   );
 }

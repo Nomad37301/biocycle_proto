@@ -64,7 +64,13 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text('${formatKg(item.quantityKg)} kg'),
+            Text('Diajukan ${formatKg(item.initialQuantityKg)} kg'),
+            if (item.acceptedQuantityKg != null)
+              Text('Diterima ${formatKg(item.acceptedQuantityKg!)} kg'),
+            if (item.historyLimited)
+              const Text(
+                'Riwayat sebelum pembaruan aplikasi terbatas pada status terakhir.',
+              ),
             Text('Dari ${item.senderName}'),
             Text('Kepada ${item.receiverName}'),
             if (item.note.isNotEmpty) ...[
@@ -97,10 +103,8 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
     if (item.status == RequestStatus.pending && item.receiverId == accountId) {
       actions.addAll([
         FilledButton(
-          onPressed: updating
-              ? null
-              : () => _confirmTransition(item, RequestStatus.accepted),
-          child: const Text('Terima pengajuan'),
+          onPressed: updating ? null : () => _acceptPartial(item),
+          child: const Text('Terima sebagian'),
         ),
         OutlinedButton(
           onPressed: updating ? null : () => _reject(item),
@@ -194,6 +198,49 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
     if (confirmed == true) await _transition(next);
   }
 
+  Future<void> _acceptPartial(CooperationRequest item) async {
+    final controller = TextEditingController(
+      text: formatKg(item.initialQuantityKg),
+    );
+    final accepted = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Terima sebagian'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Jumlah diterima (kg)',
+            helperText:
+                'Maksimal ${formatKg(item.initialQuantityKg)} kg dari pengajuan.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Kembali'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = parseQuantity(controller.text);
+              if (value != null &&
+                  value > 0 &&
+                  value <= item.initialQuantityKg) {
+                Navigator.pop(context, value);
+              }
+            },
+            child: const Text('Konfirmasi'),
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(kThemeAnimationDuration);
+    controller.dispose();
+    if (!mounted || accepted == null) return;
+    await _transition(RequestStatus.accepted, acceptedQuantityKg: accepted);
+  }
+
   Future<void> _reject(CooperationRequest item) async {
     final controller = TextEditingController();
     final reason = await showDialog<String>(
@@ -231,7 +278,11 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
     if (reason != null) await _transition(RequestStatus.rejected, note: reason);
   }
 
-  Future<void> _transition(RequestStatus next, {String note = ''}) async {
+  Future<void> _transition(
+    RequestStatus next, {
+    String note = '',
+    double? acceptedQuantityKg,
+  }) async {
     setState(() => updating = true);
     try {
       await ref
@@ -241,6 +292,7 @@ class _RequestDetailScreenState extends ConsumerState<RequestDetailScreen> {
             next: next,
             actorId: ref.read(demoSessionProvider).role.organizationId,
             note: note,
+            acceptedQuantityKg: acceptedQuantityKg,
           );
       ref.read(partnerRevisionProvider.notifier).state++;
     } catch (error) {

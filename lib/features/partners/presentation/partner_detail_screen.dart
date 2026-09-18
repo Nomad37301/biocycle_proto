@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../shared/widgets/async_content.dart';
@@ -56,6 +57,40 @@ class PartnerDetailScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               Text('${partner.role.label} · ${partner.region}'),
+              const SizedBox(height: 18),
+              ref
+                  .watch(partnerActivityProvider(partner.id))
+                  .when(
+                    loading: () =>
+                        const AppLoading(label: 'Memuat aktivitas...'),
+                    error: (_, _) => AppError(
+                      message: 'Ringkasan aktivitas gagal dimuat.',
+                      onRetry: () =>
+                          ref.invalidate(partnerActivityProvider(partner.id)),
+                    ),
+                    data: (summary) => Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${summary.completedTransactions} transaksi selesai',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              '${formatKg(summary.totalKg)} kg dipertukarkan',
+                            ),
+                            Text(
+                              summary.lastActivityAt == null
+                                  ? 'Belum ada aktivitas tercatat'
+                                  : 'Aktivitas terakhir ${DateFormat('dd MMM yyyy, HH:mm').format(summary.lastActivityAt!)}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               const SizedBox(height: 26),
               Text(
                 activeRole == DemoRole.supplier &&
@@ -161,7 +196,7 @@ class PartnerDetailScreen extends ConsumerWidget {
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(item.summary),
                                 subtitle: Text(
-                                  '${item.status.label} · ${formatKg(item.quantityKg)} kg',
+                                  '${item.status.label} · ${formatKg(item.committedQuantityKg)} kg',
                                 ),
                                 trailing: const Icon(Icons.chevron_right),
                                 onTap: () =>

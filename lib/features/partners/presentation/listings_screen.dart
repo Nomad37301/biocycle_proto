@@ -8,12 +8,20 @@ import '../../../shared/widgets/async_content.dart';
 import '../../demo_session/domain/demo_session.dart';
 import '../domain/partner_models.dart';
 
-class ListingsScreen extends ConsumerWidget {
+class ListingsScreen extends ConsumerStatefulWidget {
   const ListingsScreen({super.key, required this.ownedOnly});
   final bool ownedOnly;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ListingsScreen> createState() => _ListingsScreenState();
+}
+
+class _ListingsScreenState extends ConsumerState<ListingsScreen> {
+  String? region;
+  String? material;
+
+  @override
+  Widget build(BuildContext context) {
     final role = ref.watch(demoSessionProvider).role;
     return ContentWidth(
       child: Column(
@@ -53,29 +61,66 @@ class ListingsScreen extends ConsumerWidget {
                     onRetry: () => ref.invalidate(listingsProvider),
                   ),
                   data: (all) {
-                    final items = all
+                    final visible = all
                         .where((item) => _visible(item, role))
                         .toList();
+                    final regions =
+                        visible.map((e) => e.region).toSet().toList()..sort();
+                    final materials =
+                        visible.map((e) => e.material).toSet().toList()..sort();
+                    final items = visible
+                        .where(
+                          (item) =>
+                              (region == null || item.region == region) &&
+                              (material == null || item.material == material),
+                        )
+                        .toList();
                     if (items.isEmpty) {
-                      return EmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'Belum ada aktivitas',
-                        message: ownedOnly
-                            ? 'Buat penawaran atau kebutuhan pertama untuk memulai.'
-                            : 'Belum ada penawaran yang sesuai untuk peran ini.',
-                        action: ownedOnly
-                            ? FilledButton(
-                                onPressed: () => context.push('/listings/new'),
-                                child: const Text('Buat sekarang'),
-                              )
-                            : null,
+                      return Column(
+                        children: [
+                          _filters(regions, materials),
+                          Expanded(
+                            child: EmptyState(
+                              icon: Icons.inventory_2_outlined,
+                              title: region != null || material != null
+                                  ? 'Tidak ada hasil filter'
+                                  : 'Belum ada aktivitas',
+                              message: widget.ownedOnly
+                                  ? 'Buat penawaran atau kebutuhan pertama untuk memulai.'
+                                  : 'Belum ada penawaran yang sesuai untuk peran ini.',
+                              action: region != null || material != null
+                                  ? OutlinedButton(
+                                      onPressed: _resetFilters,
+                                      child: const Text('Reset filter'),
+                                    )
+                                  : widget.ownedOnly
+                                  ? FilledButton(
+                                      onPressed: () =>
+                                          context.push('/listings/new'),
+                                      child: const Text('Buat sekarang'),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ],
                       );
                     }
-                    return ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (_, index) =>
-                          _ListingCard(item: items[index], currentRole: role),
+                    return Column(
+                      children: [
+                        _filters(regions, materials),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (_, index) => _ListingCard(
+                              item: items[index],
+                              currentRole: role,
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -86,7 +131,7 @@ class ListingsScreen extends ConsumerWidget {
   }
 
   String _title(DemoRole role) {
-    if (!ownedOnly) return 'Peluang kerja sama';
+    if (!widget.ownedOnly) return 'Peluang kerja sama';
     return switch (role) {
       DemoRole.supplier => 'Penawaran limbah',
       DemoRole.operator => 'Penawaran hasil BSF',
@@ -95,7 +140,7 @@ class ListingsScreen extends ConsumerWidget {
   }
 
   bool _visible(PartnerListing item, DemoRole role) {
-    if (ownedOnly) return item.ownerId == role.organizationId;
+    if (widget.ownedOnly) return item.ownerId == role.organizationId;
     if (!item.isActive || item.ownerId == role.organizationId) return false;
     return switch (role) {
       DemoRole.operator =>
@@ -105,6 +150,43 @@ class ListingsScreen extends ConsumerWidget {
       DemoRole.supplier => false,
     };
   }
+
+  Widget _filters(List<String> regions, List<String> materials) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      DropdownButton<String?>(
+        value: region,
+        hint: const Text('Semua wilayah'),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('Semua wilayah')),
+          ...regions.map(
+            (value) => DropdownMenuItem(value: value, child: Text(value)),
+          ),
+        ],
+        onChanged: (value) => setState(() => region = value),
+      ),
+      DropdownButton<String?>(
+        value: material,
+        hint: const Text('Semua material'),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('Semua material')),
+          ...materials.map(
+            (value) => DropdownMenuItem(value: value, child: Text(value)),
+          ),
+        ],
+        onChanged: (value) => setState(() => material = value),
+      ),
+      if (region != null || material != null)
+        TextButton(onPressed: _resetFilters, child: const Text('Reset')),
+    ],
+  );
+
+  void _resetFilters() => setState(() {
+    region = null;
+    material = null;
+  });
 }
 
 class _ListingCard extends ConsumerWidget {

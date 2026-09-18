@@ -12,6 +12,7 @@ class InsightEvent {
     required this.resolvedAt,
     required this.note,
     required this.completedSteps,
+    required this.hasSavedAction,
   });
 
   final int id;
@@ -26,6 +27,7 @@ class InsightEvent {
   final DateTime? resolvedAt;
   final String note;
   final Set<int> completedSteps;
+  final bool hasSavedAction;
   bool get isActive => resolvedAt == null;
 
   factory InsightEvent.fromMap(Map<String, Object?> map) => InsightEvent(
@@ -47,6 +49,7 @@ class InsightEvent {
         .where((value) => value.isNotEmpty)
         .map(int.parse)
         .toSet(),
+    hasSavedAction: (map['has_saved_action'] as int?) == 1,
   );
 }
 
@@ -57,6 +60,12 @@ class InsightAction {
     required this.completedSteps,
     required this.note,
     required this.createdAt,
+    required this.beforeTemperature,
+    required this.beforeHumidity,
+    required this.beforeRecordedAt,
+    required this.afterTemperature,
+    required this.afterHumidity,
+    required this.afterRecordedAt,
   });
 
   final int id;
@@ -64,6 +73,13 @@ class InsightAction {
   final Set<int> completedSteps;
   final String note;
   final DateTime createdAt;
+  final double? beforeTemperature;
+  final double? beforeHumidity;
+  final DateTime? beforeRecordedAt;
+  final double? afterTemperature;
+  final double? afterHumidity;
+  final DateTime? afterRecordedAt;
+  bool get isWaitingForData => afterRecordedAt == null;
 
   factory InsightAction.fromMap(Map<String, Object?> map) => InsightAction(
     id: map['id']! as int,
@@ -75,6 +91,16 @@ class InsightAction {
         .toSet(),
     note: map['note']! as String,
     createdAt: DateTime.parse(map['created_at']! as String),
+    beforeTemperature: (map['before_temperature'] as num?)?.toDouble(),
+    beforeHumidity: (map['before_humidity'] as num?)?.toDouble(),
+    beforeRecordedAt: map['before_recorded_at'] == null
+        ? null
+        : DateTime.parse(map['before_recorded_at']! as String),
+    afterTemperature: (map['after_temperature'] as num?)?.toDouble(),
+    afterHumidity: (map['after_humidity'] as num?)?.toDouble(),
+    afterRecordedAt: map['after_recorded_at'] == null
+        ? null
+        : DateTime.parse(map['after_recorded_at']! as String),
   );
 }
 

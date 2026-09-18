@@ -9,31 +9,66 @@ class LocalInsightRepository implements InsightRepository {
 
   @override
   Future<List<InsightEvent>> getInsights() async {
-    final rows = await _store.database.query(
-      'insights',
-      orderBy: 'updated_at DESC',
-    );
+    final rows = await _store.database.rawQuery('''
+      SELECT i.*, EXISTS(
+        SELECT 1 FROM insight_actions a WHERE a.insight_id = i.id
+      ) AS has_saved_action
+      FROM insights i ORDER BY i.updated_at DESC''');
     return rows.map(InsightEvent.fromMap).toList();
   }
 
   @override
   Future<InsightEvent?> getInsight(int id) async {
-    final rows = await _store.database.query(
-      'insights',
-      where: 'id = ?',
-      whereArgs: [id],
+    final rows = await _store.database.rawQuery(
+      '''
+      SELECT i.*, EXISTS(
+        SELECT 1 FROM insight_actions a WHERE a.insight_id = i.id
+      ) AS has_saved_action
+      FROM insights i WHERE i.id = ?''',
+      [id],
     );
     return rows.isEmpty ? null : InsightEvent.fromMap(rows.first);
   }
 
   @override
   Future<List<InsightAction>> getActions(int insightId) async {
-    final rows = await _store.database.query(
+    final queried = await _store.database.query(
       'insight_actions',
       where: 'insight_id = ?',
       whereArgs: [insightId],
       orderBy: 'created_at DESC, id DESC',
     );
+    final rows = queried.map(Map<String, Object?>.of).toList();
+    final insight = await getInsight(insightId);
+    if (insight != null) {
+      for (final row in rows.where(
+        (item) => item['after_recorded_at'] == null,
+      )) {
+        final readings = await _store.database.query(
+          'readings',
+          where: 'unit_id = ? AND recorded_at > ?',
+          whereArgs: [insight.unitId, row['created_at']],
+          orderBy: 'recorded_at',
+          limit: 1,
+        );
+        if (readings.isNotEmpty) {
+          final reading = readings.first;
+          await _store.database.update(
+            'insight_actions',
+            {
+              'after_temperature': reading['temperature'],
+              'after_humidity': reading['humidity'],
+              'after_recorded_at': reading['recorded_at'],
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+          row['after_temperature'] = reading['temperature'];
+          row['after_humidity'] = reading['humidity'];
+          row['after_recorded_at'] = reading['recorded_at'];
+        }
+      }
+    }
     return rows.map(InsightAction.fromMap).toList();
   }
 
@@ -51,7 +86,7 @@ class LocalInsightRepository implements InsightRepository {
     }
     final kind = switch (condition) {
       UnitCondition.offline => 'offline',
-      _ when unit.temperature >= DemoThresholds.attentionTemperature =>
+      _ when unit.temperature >= unit.thresholds.temperatureAttention =>
         'temperature',
       _ => 'humidity',
     };
@@ -127,6 +162,22 @@ class LocalInsightRepository implements InsightRepository {
     final sorted = steps.toList()..sort();
     final now = DateTime.now().toIso8601String();
     await _store.database.transaction((txn) async {
+      final insightRows = await txn.query(
+        'insights',
+        columns: ['unit_id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (insightRows.isEmpty) throw StateError('Insight tidak ditemukan.');
+      final readingRows = await txn.query(
+        'readings',
+        where: 'unit_id = ?',
+        whereArgs: [insightRows.first['unit_id']],
+        orderBy: 'recorded_at DESC',
+        limit: 1,
+      );
+      final reading = readingRows.firstOrNull;
       final count = await txn.update(
         'insights',
         {
@@ -143,6 +194,9 @@ class LocalInsightRepository implements InsightRepository {
         'completed_steps': sorted.join(','),
         'note': note.trim(),
         'created_at': now,
+        'before_temperature': reading?['temperature'],
+        'before_humidity': reading?['humidity'],
+        'before_recorded_at': reading?['recorded_at'],
       });
     });
   }

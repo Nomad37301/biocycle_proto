@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../app/theme/app_theme.dart';
@@ -65,6 +66,32 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Smart Kit',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Kode perangkat: ${unit.kitCode}'),
+                    Text(
+                      'Konektivitas: ${unit.isConnected ? 'Terhubung' : 'Offline'}',
+                    ),
+                    Text(
+                      unit.lastSyncedAt == null
+                          ? 'Sinkronisasi terakhir: belum ada'
+                          : 'Sinkronisasi terakhir: ${DateFormat('dd MMM yyyy, HH:mm:ss').format(unit.lastSyncedAt!)}',
+                    ),
+                    Text('Firmware: ${unit.firmware} (simulasi)'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -94,6 +121,30 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                   icon: Icons.wifi,
                 ),
               ],
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Batas kondisi',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                OutlinedButton(
+                  onPressed: () => _editThresholds(unit),
+                  child: const Text('Ubah batas'),
+                ),
+              ],
+            ),
+            Text(
+              'Suhu ${unit.thresholds.temperatureAttention.toStringAsFixed(1)} / ${unit.thresholds.temperatureCritical.toStringAsFixed(1)} °C, kelembapan ${unit.thresholds.humidityAttention.toStringAsFixed(0)} / ${unit.thresholds.humidityCritical.toStringAsFixed(0)}%.',
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/units/${unit.id}/summary'),
+              icon: const Icon(Icons.analytics_outlined),
+              label: const Text('Buka ringkasan operasional'),
             ),
             const SizedBox(height: 28),
             LayoutBuilder(
@@ -129,7 +180,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
             const SizedBox(height: 6),
             Text('Suhu dan kelembapan dalam $rangeHours jam terakhir.'),
             const SizedBox(height: 20),
-            SizedBox(height: 250, child: _chart()),
+            SizedBox(height: 250, child: _chart(unit.thresholds)),
             const SizedBox(height: 16),
             const _Legend(),
             const SizedBox(height: 18),
@@ -142,7 +193,7 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
     ],
   );
 
-  Widget _chart() => ref
+  Widget _chart(UnitThresholds thresholds) => ref
       .watch(historyProvider((widget.unitId, rangeHours)))
       .when(
         loading: () => const AppLoading(label: 'Memuat riwayat...'),
@@ -203,11 +254,131 @@ class _UnitDetailScreenState extends ConsumerState<UnitDetailScreen> {
                     barWidth: 3,
                   ),
                 ],
+                extraLinesData: ExtraLinesData(
+                  horizontalLines: [
+                    HorizontalLine(
+                      y: thresholds.temperatureAttention,
+                      color: AppColors.warning.withValues(alpha: 0.55),
+                      dashArray: [6, 4],
+                    ),
+                    HorizontalLine(
+                      y: thresholds.temperatureCritical,
+                      color: AppColors.danger.withValues(alpha: 0.55),
+                      dashArray: [6, 4],
+                    ),
+                    HorizontalLine(
+                      y: thresholds.humidityAttention,
+                      color: AppColors.warning.withValues(alpha: 0.35),
+                      dashArray: [3, 5],
+                    ),
+                    HorizontalLine(
+                      y: thresholds.humidityCritical,
+                      color: AppColors.danger.withValues(alpha: 0.35),
+                      dashArray: [3, 5],
+                    ),
+                  ],
+                ),
               ),
             ),
           );
         },
       );
+
+  Future<void> _editThresholds(BsfUnit unit) async {
+    final values = [
+      unit.thresholds.temperatureAttention,
+      unit.thresholds.temperatureCritical,
+      unit.thresholds.humidityAttention,
+      unit.thresholds.humidityCritical,
+    ];
+    final controllers = values
+        .map((value) => TextEditingController(text: value.toStringAsFixed(1)))
+        .toList();
+    String? error;
+    final result = await showDialog<UnitThresholds>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Batas ${unit.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < controllers.length; index++) ...[
+                  TextField(
+                    controller: controllers[index],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: const [
+                        'Suhu perlu perhatian (°C)',
+                        'Suhu kritis (°C)',
+                        'Kelembapan perlu perhatian (%)',
+                        'Kelembapan kritis (%)',
+                      ][index],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (error != null)
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final parsed = controllers
+                    .map(
+                      (controller) =>
+                          double.tryParse(controller.text.replaceAll(',', '.')),
+                    )
+                    .toList();
+                if (parsed.any((value) => value == null || !value.isFinite)) {
+                  setDialogState(
+                    () => error = 'Semua batas harus berupa angka finite.',
+                  );
+                  return;
+                }
+                final thresholds = UnitThresholds(
+                  temperatureAttention: parsed[0]!,
+                  temperatureCritical: parsed[1]!,
+                  humidityAttention: parsed[2]!,
+                  humidityCritical: parsed[3]!,
+                );
+                if (!thresholds.isValid) {
+                  setDialogState(
+                    () => error = 'Batas perhatian harus di bawah kritis. Kelembapan harus 0 sampai 100%.',
+                  );
+                  return;
+                }
+                Navigator.pop(context, thresholds);
+              },
+              child: const Text('Simpan batas'),
+            ),
+          ],
+        ),
+      ),
+    );
+    for (final controller in controllers) {
+      controller.dispose();
+    }
+    if (result == null || !mounted) return;
+    await ref
+        .read(demoSessionProvider.notifier)
+        .updateThresholds(unit.id, result);
+    ref.invalidate(unitProvider(unit.id));
+  }
 }
 
 class _Reading extends StatelessWidget {

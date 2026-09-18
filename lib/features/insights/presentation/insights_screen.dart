@@ -101,7 +101,22 @@ class _InsightCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(item.cause),
                     const SizedBox(height: 8),
-                    Text(DateFormat('dd MMM, HH:mm').format(item.updatedAt)),
+                    Text(
+                      item.isActive
+                          ? 'Aktif ${_age(item.startedAt)}'
+                          : DateFormat('dd MMM, HH:mm').format(item.updatedAt),
+                    ),
+                    if (item.isActive &&
+                        !item.hasSavedAction &&
+                        DateTime.now().difference(item.startedAt) >=
+                            const Duration(minutes: 15))
+                      Text(
+                        'Belum ditangani',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -111,5 +126,11 @@ class _InsightCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _age(DateTime startedAt) {
+    final age = DateTime.now().difference(startedAt);
+    if (age.inHours > 0) return '${age.inHours} jam';
+    return '${age.inMinutes} menit';
   }
 }

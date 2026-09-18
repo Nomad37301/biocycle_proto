@@ -96,6 +96,18 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
                     const SizedBox(height: 8),
                     Text(item.cause),
                     const SizedBox(height: 8),
+                    Text('Usia insight: ${_age(item.startedAt)}'),
+                    if (item.isActive &&
+                        !item.hasSavedAction &&
+                        DateTime.now().difference(item.startedAt) >=
+                            const Duration(minutes: 15))
+                      Text(
+                        'Belum ditangani',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     Text(
                       'Terakhir diperbarui ${DateFormat('dd MMM yyyy, HH:mm').format(item.updatedAt)}',
                     ),
@@ -225,6 +237,15 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
                                 '${action.completedSteps.length} langkah dicentang',
                               ),
                               if (action.note.isNotEmpty) Text(action.note),
+                              const SizedBox(height: 8),
+                              Text(
+                                action.isWaitingForData
+                                    ? 'Menunggu data sensor pertama setelah tindakan.'
+                                    : _comparison(action),
+                              ),
+                              const Text(
+                                'Perbandingan ini tidak menyimpulkan sebab-akibat.',
+                              ),
                             ],
                           ),
                         ),
@@ -233,6 +254,23 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
                     .toList(),
               ),
       );
+
+  String _age(DateTime startedAt) {
+    final age = DateTime.now().difference(startedAt);
+    if (age.inHours > 0) return '${age.inHours} jam';
+    return '${age.inMinutes} menit';
+  }
+
+  String _comparison(InsightAction action) {
+    if (action.beforeTemperature == null ||
+        action.beforeHumidity == null ||
+        action.afterTemperature == null ||
+        action.afterHumidity == null) {
+      return 'Menunggu data sensor lengkap.';
+    }
+    return 'Suhu ${action.beforeTemperature!.toStringAsFixed(1)} ke ${action.afterTemperature!.toStringAsFixed(1)} °C. '
+        'Kelembapan ${action.beforeHumidity!.toStringAsFixed(1)} ke ${action.afterHumidity!.toStringAsFixed(1)}%.';
+  }
 }
 
 class _RoleGuard extends StatelessWidget {

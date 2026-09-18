@@ -15,13 +15,15 @@ Aplikasi dirancang untuk kebutuhan demonstrasi dan kompetisi inovasi bisnis (IDB
 ### 1. Monitoring Unit Budidaya BSF
 - **Pemantauan Kondisi Lingkungan**: Memantau suhu (°C), kelembapan relatif (%), status kelembapan media (Kering, Ideal, Terlalu Basah), dan status konektivitas perangkat secara berkala.
 - **Grafik Tren Telemetri**: Menampilkan visualisasi riwayat fluktuasi suhu dan kelembapan per unit budidaya menggunakan pustaka `fl_chart`.
-- **Indikator Ambang Batas**: Menandai status unit (Optimal, Perhatian, Kritis, Offline) sesuai parameter ideal biokonversi larva BSF.
+- **Ambang Batas per Unit**: Operator dapat mengatur batas perhatian dan kritis untuk suhu serta kelembapan. Dashboard, grafik, dan insight memakai konfigurasi yang sama.
+- **Ringkasan Operasional**: Menampilkan rata-rata, minimum, maksimum, jumlah sampel, cakupan waktu, dan insight dimulai untuk 24 jam atau 7 hari.
 
 ### 2. Sistem Insight & SOP Digital
 - **Deteksi Kondisi Otomatis**: Menghasilkan catatan analisis ketika parameter lingkungan berada di luar ambang batas ideal (misalnya suhu berlebih atau kelembapan tinggi).
 - **Rekomendasi Tindakan Cepat**: Memberikan panduan aksi perbaikan langsung (misalnya aktivasi ventilasi/exhaust, pengadukan media, atau penyesuaian pakan).
 - **Checklist SOP Terstruktur**: Checklist langkah kerja operasional yang dapat dicentang langsung oleh operator saat melakukan penanganan di lapangan.
 - **Pencatatan Riwayat Tindakan**: Menyimpan log tindakan penanganan yang telah diselesaikan ke dalam basis data lokal.
+- **Perbandingan Setelah SOP**: Menyimpan pembacaan terakhir saat tindakan dicatat lalu membandingkannya dengan pembacaan pertama setelah tindakan tanpa menyimpulkan sebab-akibat.
 
 ### 3. Simulasi Sensor & Skenario Demo
 - **Skenario Langsung dari Header**: Penguji dapat mengubah kondisi telemetri secara instan untuk mengamati respons aplikasi:
@@ -31,15 +33,17 @@ Aplikasi dirancang untuk kebutuhan demonstrasi dan kompetisi inovasi bisnis (IDB
   - **Perangkat Offline**: Simulasi kegagalan koneksi modul telemetri.
 - **Notifikasi Lokal**: Mengirim pemberitahuan lokal pada perangkat Android ketika terjadi perubahan status kritis atau rekomendasi baru.
 - **Reset Data Demo**: Memungkinkan pengembalian seluruh data transaksi dan pembacaan sensor ke kondisi awal kapan saja melalui menu pengaturan.
+- **Semua Unit Berjalan**: Seluruh unit diperbarui tiap 5 detik. Kontrol skenario hanya memengaruhi unit yang dipilih.
 
 ### 4. Jaringan Kemitraan (Partner Hub)
 Menyediakan simulasi alur kerja sama antara tiga pihak dalam satu basis data:
 - **Penyedia Limbah**: Restoran, pasar, atau industri pengolahan makanan yang menawarkan bahan baku limbah organik.
 - **Operator BSF**: Fasilitas biokonversi yang membutuhkan pasokan limbah dan memproduksi larva kering/segar serta pupuk kasgot.
 - **Pembeli Hasil**: Peternak, perikanan, atau distributor pupuk yang membutuhkan produk turunan BSF.
-- **Siklus Pengajuan Terpadu**: Pembuatan listing penawaran/kebutuhan, pengajuan dua arah, penerimaan atau penolakan, pembatalan, hingga konfirmasi barang diterima.
+- **Siklus Pengajuan Terpadu**: Pembuatan listing penawaran/kebutuhan, pengajuan dua arah, penerimaan sebagian, penolakan, pembatalan, hingga konfirmasi barang diterima.
 - **Jumlah Tersedia**: Transaksi yang diterima dan selesai mengurangi jumlah tersedia sehingga satu listing dapat dipakai untuk beberapa kerja sama parsial.
 - **Riwayat Pengajuan**: Setiap perubahan status menyimpan pelaku, waktu, dan catatan pada perangkat.
+- **Notifikasi per Akun**: Pengajuan masuk dan perubahan status disimpan per akun lalu ditampilkan satu kali ketika akun penerima aktif dan izin Android tersedia.
 
 ### 5. Multi-Peran Workspace
 Pengalih akun cepat pada app bar memungkinkan demonstrator beralih tampilan dan hak akses secara langsung antara Operator BSF, Penyedia Limbah, dan Pembeli Hasil tanpa perlu proses login ulang.
@@ -114,11 +118,13 @@ lib/
 ## Panduan Demonstrasi Alur Kerja (Demo Walkthrough)
 
 1. **Memeriksa Dashboard & Unit Telemetri**:
-   - Buka tab **Monitoring** untuk melihat daftar rak/unit budidaya.
-   - Pilih salah satu unit untuk melihat riwayat grafik suhu, kelembapan, serta status media.
+   - Selesaikan atau lewati onboarding tiga langkah.
+   - Buka tab **Unit** untuk melihat semua unit budidaya.
+   - Pilih salah satu unit untuk melihat kode Smart Kit, konektivitas, sinkronisasi terakhir, firmware simulasi, grafik, batas kondisi, dan ringkasan operasional.
 
 2. **Menguji Skenario Simulasi Sensor**:
    - Ketuk ikon sensor pada app bar bagian atas.
+   - Pilih unit yang akan diberi skenario. Unit lain tetap berjalan normal.
    - Ubah skenario dari **Normal** menjadi **Suhu meningkat** atau **Kelembapan meningkat**.
    - Perhatikan perubahan status unit pada layar serta masuknya notifikasi peringatan.
    - Masuk ke tab **Insight** untuk melihat analisis anomali, pelajari rekomendasi tindakan, dan centang SOP perbaikan.
@@ -127,7 +133,7 @@ lib/
    - Beralih ke peran **Penyedia Limbah** melalui menu profil di app bar.
    - Buat penawaran limbah organik baru pada tab **Partner Hub**.
    - Ganti peran menjadi **Operator BSF**, temukan listing limbah tersebut, lalu ajukan permohonan kemitraan.
-   - Kembali ke peran **Penyedia Limbah** untuk menyetujui pengajuan.
+   - Kembali ke peran **Penyedia Limbah** untuk menerima seluruh atau sebagian jumlah pengajuan.
    - Beralih ke **Operator BSF**, buka pengajuan yang diterima, lalu konfirmasi bahwa limbah telah diterima.
    - Untuk arah sebaliknya, buka profil operator sebagai penyedia, pilih penawaran limbah milik sendiri, lalu kirim penawaran langsung ke operator.
    - Uji alur hasil BSF dengan membuat penawaran sebagai operator dan mengajukannya sebagai pembeli. Pembeli menyelesaikan transaksi setelah barang diterima.
@@ -161,4 +167,5 @@ Cakupan pengujian mencakup:
 
 - Data sensor, daftar mitra, dan transaksi yang ditampilkan merupakan data simulasi lokal untuk keperluan demonstrasi fungsional dan validasi konsep bisnis.
 - Aplikasi tidak terhubung ke perangkat keras IoT fisik, gateway pembayaran, ataupun sistem perpesanan eksternal. Seluruh logika berjalan mandiri pada penyimpanan perangkat.
-- Tiga akun demo berbagi satu database SQLite v3. Pengalih akun dipakai untuk memeriksa kedua sisi transaksi pada perangkat yang sama.
+- Paket operator Rp299.000/bulan, masa trial, dan aktivasi 30 hari merupakan simulasi. Tidak ada pembayaran atau pembatasan fitur.
+- Tiga akun demo berbagi satu database SQLite v5. Migrasi bertahap dari v3 mempertahankan data dan menandai riwayat lama melalui nilai hasil backfill.

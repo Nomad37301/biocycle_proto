@@ -5,6 +5,7 @@ import '../../../app/app_providers.dart';
 import '../../demo_session/domain/demo_session.dart';
 import 'listings_screen.dart';
 import 'partners_screen.dart';
+import 'pitch_estimate_screen.dart';
 import 'requests_screen.dart';
 
 class PartnerHubScreen extends ConsumerWidget {
@@ -13,7 +14,7 @@ class PartnerHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final operator = ref.watch(demoSessionProvider).role == DemoRole.operator;
     return DefaultTabController(
-      length: operator ? 4 : 3,
+      length: operator ? 5 : 3,
       child: Column(
         children: [
           Padding(
@@ -26,6 +27,7 @@ class PartnerHubScreen extends ConsumerWidget {
                 if (operator) const Tab(text: 'Penawaran saya'),
                 const Tab(text: 'Pengajuan'),
                 const Tab(text: 'Direktori'),
+                if (operator) const Tab(text: 'Estimasi'),
               ],
             ),
           ),
@@ -36,6 +38,7 @@ class PartnerHubScreen extends ConsumerWidget {
                 if (operator) const ListingsScreen(ownedOnly: true),
                 const RequestsScreen(),
                 const PartnersScreen(),
+                if (operator) const PitchEstimateScreen(),
               ],
             ),
           ),

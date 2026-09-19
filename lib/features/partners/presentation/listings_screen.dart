@@ -4,13 +4,15 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/app_providers.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../shared/widgets/async_content.dart';
 import '../../demo_session/domain/demo_session.dart';
 import '../domain/partner_models.dart';
 
 class ListingsScreen extends ConsumerStatefulWidget {
-  const ListingsScreen({super.key, required this.ownedOnly});
+  const ListingsScreen({super.key, required this.ownedOnly, this.roleOverride});
   final bool ownedOnly;
+  final DemoRole? roleOverride;
 
   @override
   ConsumerState<ListingsScreen> createState() => _ListingsScreenState();
@@ -22,7 +24,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final role = ref.watch(demoSessionProvider).role;
+    final role = widget.roleOverride ?? ref.watch(demoSessionProvider).role;
     return ContentWidth(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,37 +153,142 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     };
   }
 
-  Widget _filters(List<String> regions, List<String> materials) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      DropdownButton<String?>(
-        value: region,
-        hint: const Text('Semua wilayah'),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('Semua wilayah')),
-          ...regions.map(
-            (value) => DropdownMenuItem(value: value, child: Text(value)),
+  Widget _filters(List<String> regions, List<String> materials) {
+    final count = [region, material].whereType<String>().length;
+    final summary = [?region, ?material].join(' · ');
+    return Row(
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => _showFilters(regions, materials),
+          icon: const Icon(Icons.filter_list),
+          label: Text(count == 0 ? 'Filter katalog' : 'Filter ($count)'),
+        ),
+        if (summary.isNotEmpty) ...[
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
         ],
-        onChanged: (value) => setState(() => region = value),
-      ),
-      DropdownButton<String?>(
-        value: material,
-        hint: const Text('Semua material'),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('Semua material')),
-          ...materials.map(
-            (value) => DropdownMenuItem(value: value, child: Text(value)),
+      ],
+    );
+  }
+
+  Future<void> _showFilters(
+    List<String> regions,
+    List<String> materials,
+  ) async {
+    var draftRegion = region;
+    var draftMaterial = material;
+    final applied =
+        await showModalBottomSheet<({String? region, String? material})>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setSheetState) => SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  MediaQuery.viewInsetsOf(context).bottom + AppSpacing.md,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Filter katalog',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      const Text(
+                        'Pilih wilayah dan material. Perubahan baru berlaku setelah Terapkan.',
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      DropdownButtonFormField<String?>(
+                        initialValue: draftRegion,
+                        decoration: const InputDecoration(labelText: 'Wilayah'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Semua wilayah'),
+                          ),
+                          ...regions.map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setSheetState(() => draftRegion = value),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      DropdownButtonFormField<String?>(
+                        initialValue: draftMaterial,
+                        decoration: const InputDecoration(
+                          labelText: 'Material',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Semua material'),
+                          ),
+                          ...materials.map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setSheetState(() => draftMaterial = value),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Wrap(
+                        spacing: AppSpacing.xs,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          TextButton(
+                            onPressed: () => setSheetState(() {
+                              draftRegion = null;
+                              draftMaterial = null;
+                            }),
+                            child: const Text('Reset filter'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Batal'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(context, (
+                              region: draftRegion,
+                              material: draftMaterial,
+                            )),
+                            child: const Text('Terapkan'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
-        onChanged: (value) => setState(() => material = value),
-      ),
-      if (region != null || material != null)
-        TextButton(onPressed: _resetFilters, child: const Text('Reset')),
-    ],
-  );
+        );
+    if (applied == null || !mounted) return;
+    setState(() {
+      region = applied.region;
+      material = applied.material;
+    });
+  }
 
   void _resetFilters() => setState(() {
     region = null;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app_providers.dart';
+import '../theme/app_theme.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/demo_session/domain/demo_session.dart';
 import '../../features/demo_session/presentation/demo_controls.dart';
@@ -32,13 +33,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
     final destinations = _destinations(state.role);
     final pages = _pages(state.role);
+    final coachDismissed = ref.watch(coachMarkDismissedProvider(state.role));
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 12,
         title: Row(
           children: [
             Image.asset(
-              'asset/ChatGPT Image Aug 30, 2026, 10_03_50 PM.png',
+              'asset/images/biocycle_logo.png',
               width: 38,
               height: 38,
               semanticLabel: 'BioCycle',
@@ -54,10 +56,11 @@ class _AppShellState extends ConsumerState<AppShell> {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  Text(
-                    'Simulasi peran · ${state.role.label}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  if (MediaQuery.textScalerOf(context).scale(1) <= 1.3)
+                    Text(
+                      'Simulasi peran · ${state.role.label}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ),
             ),
@@ -115,7 +118,23 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: index, children: pages),
+      body: Column(
+        children: [
+          const _CriticalAnnouncement(),
+          coachDismissed.maybeWhen(
+            data: (dismissed) => dismissed
+                ? const SizedBox.shrink()
+                : _CoachMark(
+                    role: state.role,
+                    onDismiss: () => _dismissCoachMark(state.role),
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: IndexedStack(index: index, children: pages),
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
@@ -213,4 +232,79 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     ],
   };
+
+  Future<void> _dismissCoachMark(DemoRole role) async {
+    await ref
+        .read(databaseProvider)
+        .setSetting('coach_mark_${role.name}_dismissed', 'true');
+    ref.read(demoSessionProvider.notifier).refresh();
+  }
+}
+
+class _CoachMark extends StatelessWidget {
+  const _CoachMark({required this.role, required this.onDismiss});
+
+  final DemoRole role;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = switch (role) {
+      DemoRole.operator => 'Mulai dari Prioritas unit. Kontrol lab di kanan atas memicu skenario pada unit pilihan.',
+      DemoRole.supplier => 'Buka Pengajuan untuk merespons jumlah yang ditawarkan, termasuk penerimaan sebagian.',
+      DemoRole.buyer => 'Buka Kebutuhan untuk mencatat permintaan, lalu pantau statusnya di Pengajuan.',
+    };
+    return Material(
+      color: context.bioCycleTheme.sunken,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, size: 22),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: Text(message)),
+            IconButton(
+              tooltip: 'Tutup petunjuk',
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CriticalAnnouncement extends ConsumerStatefulWidget {
+  const _CriticalAnnouncement();
+
+  @override
+  ConsumerState<_CriticalAnnouncement> createState() =>
+      _CriticalAnnouncementState();
+}
+
+class _CriticalAnnouncementState extends ConsumerState<_CriticalAnnouncement> {
+  final announced = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final insights = ref.watch(insightsProvider).valueOrNull ?? const [];
+    if (insights.isEmpty) announced.clear();
+    String? announcement;
+    for (final insight in insights.where(
+      (item) => item.isActive && item.severity == 'critical',
+    )) {
+      final transitionId = insight.episodeId ?? 'insight-${insight.id}';
+      if (announced.add(transitionId)) {
+        announcement =
+            'Kondisi kritis pada ${insight.unitName}. ${insight.cause}';
+        break;
+      }
+    }
+    return Semantics(
+      liveRegion: true,
+      label: announcement,
+      child: const SizedBox.shrink(),
+    );
+  }
 }

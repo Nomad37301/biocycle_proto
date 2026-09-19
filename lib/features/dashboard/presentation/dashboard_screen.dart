@@ -26,12 +26,12 @@ class _OperatorDashboard extends ConsumerWidget {
   const _OperatorDashboard();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final units = ref.watch(unitsProvider);
+    final units = ref.watch(monitoringUnitsProvider);
     final insights = ref.watch(insightsProvider);
     return RefreshIndicator(
       onRefresh: () async {
         ref.read(demoSessionProvider.notifier).refresh();
-        await ref.read(unitsProvider.future);
+        await ref.read(monitoringUnitsProvider.future);
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -46,7 +46,7 @@ class _OperatorDashboard extends ConsumerWidget {
               loading: () => const AppLoading(),
               error: (_, _) => AppError(
                 message: 'Data unit belum dapat dibuka.',
-                onRetry: () => ref.invalidate(unitsProvider),
+                onRetry: () => ref.invalidate(monitoringUnitsProvider),
               ),
               data: (items) {
                 if (insights.isLoading) {
@@ -58,35 +58,61 @@ class _OperatorDashboard extends ConsumerWidget {
                     onRetry: () => ref.invalidate(insightsProvider),
                   );
                 }
+                final insightItems = insights.requireValue;
+                DateTime? oldestAlert(int unitId) => insightItems
+                    .where((item) => item.isActive && item.unitId == unitId)
+                    .map((item) => item.startedAt)
+                    .fold<DateTime?>(
+                      null,
+                      (oldest, value) =>
+                          oldest == null || value.isBefore(oldest)
+                          ? value
+                          : oldest,
+                    );
                 final ordered = [...items]
-                  ..sort(
-                    (a, b) =>
-                        _weight(b.condition).compareTo(_weight(a.condition)),
-                  );
+                  ..sort((a, b) {
+                    final severity = _weight(b.evaluation.condition)
+                        .compareTo(_weight(a.evaluation.condition));
+                    if (severity != 0) return severity;
+                    final aAlert = oldestAlert(a.unit.id);
+                    final bAlert = oldestAlert(b.unit.id);
+                    if (aAlert != null && bAlert != null) {
+                      final alertOrder = aAlert.compareTo(bAlert);
+                      if (alertOrder != 0) return alertOrder;
+                    } else if (aAlert != null) {
+                      return -1;
+                    } else if (bAlert != null) {
+                      return 1;
+                    }
+                    return a.unit.id.compareTo(b.unit.id);
+                  });
                 final active = insights.requireValue
                     .where((item) => item.isActive)
                     .length;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _Summary(
-                            value: '${items.length}',
-                            label: 'Unit demo',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _Summary(
-                            value: '$active',
-                            label: 'Insight aktif',
-                          ),
-                        ),
-                      ],
-                    ),
+                    _TriageSummary(snapshots: items, activeAlerts: active),
                     const SizedBox(height: 24),
+                    Text(
+                      'Prioritas unit',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Severity tertinggi dan alert tertua tampil lebih dulu.',
+                    ),
+                    const SizedBox(height: 12),
+                    ...ordered.map(
+                      (snapshot) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: UnitCard(
+                          snapshot: snapshot,
+                          configuration: ref.watch(demoConfigurationProvider),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
                       'Alur material tercatat',
                       style: Theme.of(context).textTheme.titleLarge,
@@ -169,7 +195,7 @@ class _OperatorDashboard extends ConsumerWidget {
                                           attention.conditionEvents == 0
                                       ? null
                                       : () => context.push(
-                                          '/units/${ordered.first.id}',
+                                          '/units/${ordered.first.unit.id}',
                                         ),
                                 ),
                                 ListTile(
@@ -200,22 +226,6 @@ class _OperatorDashboard extends ConsumerWidget {
                             ),
                           ),
                         ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Prioritas unit',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Unit dengan kondisi terpenting ditampilkan lebih dulu.',
-                    ),
-                    const SizedBox(height: 12),
-                    ...ordered.map(
-                      (unit) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: UnitCard(unit: unit),
-                      ),
-                    ),
                   ],
                 );
               },
@@ -228,8 +238,8 @@ class _OperatorDashboard extends ConsumerWidget {
 
   static int _weight(UnitCondition condition) => switch (condition) {
     UnitCondition.critical => 4,
-    UnitCondition.offline => 3,
-    UnitCondition.attention => 2,
+    UnitCondition.attention => 3,
+    UnitCondition.unknown => 2,
     UnitCondition.optimal => 1,
   };
 }
@@ -424,6 +434,61 @@ class _Summary extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _TriageSummary extends StatelessWidget {
+  const _TriageSummary({required this.snapshots, required this.activeAlerts});
+
+  final List<UnitMonitoringSnapshot> snapshots;
+  final int activeAlerts;
+
+  @override
+  Widget build(BuildContext context) {
+    final critical = snapshots
+        .where((item) => item.evaluation.condition == ConditionState.critical)
+        .length;
+    final attention = snapshots
+        .where((item) => item.evaluation.condition == ConditionState.attention)
+        .length;
+    final unknown = snapshots
+        .where((item) => item.evaluation.condition == ConditionState.unknown)
+        .length;
+    final allSafe =
+        snapshots.isNotEmpty &&
+        snapshots.every(
+          (item) =>
+              item.evaluation.condition == ConditionState.optimal &&
+              item.evaluation.coverageComplete,
+        );
+    final headline = allSafe
+        ? 'Semua unit terpantau optimal'
+        : critical > 0
+        ? '$critical unit kritis perlu tindakan'
+        : attention > 0
+        ? '$attention unit perlu perhatian'
+        : '$unknown unit belum dapat dinilai';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(headline, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '$critical kritis · $attention perhatian · $unknown belum dinilai · $activeAlerts insight aktif',
+            ),
+            if (!allSafe) ...[
+              const SizedBox(height: AppSpacing.xs),
+              const Text(
+                'Urutan di bawah mendahulukan severity, alert tertua, lalu ID unit.',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FlowStep extends StatelessWidget {

@@ -12,6 +12,8 @@ Future<void> bootstrap() async {
   await initDatabasePlatform();
   final database = await AppDatabase.open();
   final notifications = NotificationService();
+  notifications.sessionGeneration =
+      int.tryParse(await database.getSetting('session_generation') ?? '') ?? 1;
   final initialNotification = await notifications.initialize();
   final showOnboarding =
       await database.getSetting('onboarding_complete') != 'true';

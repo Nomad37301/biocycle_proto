@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../shared/widgets/app_surface.dart';
+import '../../demo_session/domain/demo_session.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -13,100 +15,132 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final controller = PageController();
-  int page = 0;
-
-  static const steps = [
-    (
-      Icons.sensors,
-      'Smart Kit',
-      'Tiga unit simulasi mengirim suhu, kelembapan, kondisi media, dan status koneksi setiap 5 detik.',
-    ),
-    (
-      Icons.dashboard_outlined,
-      'Dashboard',
-      'Pantau prioritas unit dan alur transaksi. Gunakan menu akun untuk berganti peran operator, penyedia, atau pembeli.',
-    ),
-    (
-      Icons.notification_important_outlined,
-      'Insight',
-      'Kondisi di luar batas membuat insight dan SOP. Semua data prototipe tersimpan lokal di perangkat.',
-    ),
-  ];
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
+  DemoRole? selectedRole;
+  bool saving = false;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Column(
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(onPressed: _finish, child: const Text('Lewati')),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Pilih peran demo',
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
-          Expanded(
-            child: PageView.builder(
-              controller: controller,
-              itemCount: steps.length,
-              onPageChanged: (value) => setState(() => page = value),
-              itemBuilder: (context, index) {
-                final step = steps[index];
-                return Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(step.$1, size: 78, color: AppColors.forest),
-                      const SizedBox(height: 28),
-                      Text(
-                        step.$2,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(step.$3, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Mode simulasi. Tidak ada perangkat, pembayaran, atau layanan daring yang dihubungkan.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                );
-              },
+          const SizedBox(height: AppSpacing.xs),
+          const Text(
+            'Pilihan ini menentukan pekerjaan dan navigasi yang tampil. Anda dapat menggantinya lagi dari menu akun.',
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          ...DemoRole.values.map(
+            (role) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _RoleOption(
+                role: role,
+                selected: selectedRole == role,
+                onTap: () => setState(() => selectedRole = role),
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: Row(
-              children: [
-                Text('${page + 1} dari ${steps.length}'),
-                const Spacer(),
-                FilledButton(
-                  onPressed: page == steps.length - 1
-                      ? _finish
-                      : () => controller.nextPage(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOut,
-                        ),
-                  child: Text(
-                    page == steps.length - 1 ? 'Masuk ke demo' : 'Lanjut',
-                  ),
-                ),
-              ],
+          const SizedBox(height: AppSpacing.sm),
+          AppSurface(
+            level: AppSurfaceLevel.sunken,
+            borderRadius: AppRadius.control,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: const Text(
+              'Simulasi lokal. Tidak ada perangkat, pembayaran, autentikasi production, atau layanan daring yang dihubungkan.',
             ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          FilledButton(
+            onPressed: selectedRole == null || saving
+                ? null
+                : () => _finish(selectedRole!),
+            child: Text(saving ? 'Menyimpan...' : 'Masuk dengan peran ini'),
           ),
         ],
       ),
     ),
   );
 
-  Future<void> _finish() async {
+  Future<void> _finish(DemoRole role) async {
+    setState(() => saving = true);
+    await ref.read(demoSessionProvider.notifier).setRole(role);
     await ref.read(databaseProvider).setSetting('onboarding_complete', 'true');
     if (mounted) context.go('/');
+  }
+}
+
+class _RoleOption extends StatelessWidget {
+  const _RoleOption({
+    required this.role,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final DemoRole role;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = switch (role) {
+      DemoRole.operator =>
+        'Pantau unit BSF, tangani insight, dan catat tindakan SOP.',
+      DemoRole.supplier =>
+        'Kelola penawaran limbah organik dan respons pengajuan.',
+      DemoRole.buyer => 'Catat kebutuhan hasil BSF dan pantau kerja sama.',
+    };
+    final icon = switch (role) {
+      DemoRole.operator => Icons.sensors_outlined,
+      DemoRole.supplier => Icons.compost_outlined,
+      DemoRole.buyer => Icons.agriculture_outlined,
+    };
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '${role.label}. $description',
+      child: AppSurface(
+        padding: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 88),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(icon, size: 30, color: AppColors.forest),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          role.label,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.xxs),
+                        Text(description),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: selected ? AppColors.forest : AppColors.ink,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

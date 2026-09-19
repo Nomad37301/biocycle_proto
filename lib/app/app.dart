@@ -60,10 +60,13 @@ class _BioCycleAppState extends ConsumerState<BioCycleApp>
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
-    title: 'BioCycle',
-    debugShowCheckedModeBanner: false,
-    theme: buildAppTheme(),
-    routerConfig: router,
-  );
+  Widget build(BuildContext context) {
+    final modeTerik = ref.watch(modeTerikProvider).valueOrNull ?? false;
+    return MaterialApp.router(
+      title: 'BioCycle',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(modeTerik: modeTerik),
+      routerConfig: router,
+    );
+  }
 }

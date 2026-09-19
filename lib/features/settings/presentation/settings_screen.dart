@@ -52,6 +52,34 @@ class SettingsScreen extends ConsumerWidget {
                     ),
               ),
               const SizedBox(height: 12),
+              Card(
+                child: ref
+                    .watch(modeTerikProvider)
+                    .when(
+                      loading: () => const ListTile(
+                        title: Text('Memuat Mode Terik...'),
+                        trailing: CircularProgressIndicator(),
+                      ),
+                      error: (_, _) => ListTile(
+                        title: const Text('Mode Terik gagal dimuat'),
+                        trailing: IconButton(
+                          tooltip: 'Coba lagi',
+                          onPressed: () => ref.invalidate(modeTerikProvider),
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ),
+                      data: (enabled) => SwitchListTile(
+                        secondary: const Icon(Icons.wb_sunny_outlined),
+                        title: const Text('Mode Terik'),
+                        subtitle: const Text(
+                          'Perkuat batas, bobot teks, dan permukaan untuk kondisi cahaya terang.',
+                        ),
+                        value: enabled,
+                        onChanged: (value) => _setModeTerik(ref, value),
+                      ),
+                    ),
+              ),
+              const SizedBox(height: 12),
               if (ref.watch(demoSessionProvider).role == DemoRole.operator) ...[
                 ref
                     .watch(demoServicePlanProvider)
@@ -102,9 +130,9 @@ class SettingsScreen extends ConsumerWidget {
                 child: ListTile(
                   minVerticalPadding: 14,
                   leading: const Icon(Icons.slideshow_outlined),
-                  title: const Text('Ulangi onboarding'),
+                  title: const Text('Ulangi pemilihan peran'),
                   subtitle: const Text(
-                    'Buka lagi panduan Smart Kit, Dashboard, dan Insight.',
+                    'Pilih workspace Operator, Penyedia, atau Pembeli.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/onboarding'),
@@ -137,7 +165,7 @@ class SettingsScreen extends ConsumerWidget {
                     children: [
                       Center(
                         child: Image.asset(
-                          'asset/ChatGPT Image Aug 30, 2026, 10_03_50 PM.png',
+                          'asset/images/biocycle_logo.png',
                           height: 150,
                           semanticLabel: 'Logo BioCycle',
                         ),
@@ -216,11 +244,7 @@ class SettingsScreen extends ConsumerWidget {
     await session.reset();
     partnerRevision.state++;
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data awal BioCycle telah dimuat kembali.'),
-        ),
-      );
+      context.go('/onboarding');
     }
   }
 
@@ -233,6 +257,13 @@ class SettingsScreen extends ConsumerWidget {
       'service_ends_at',
       now.add(const Duration(days: 30)).toIso8601String(),
     );
+    ref.read(demoSessionProvider.notifier).refresh();
+  }
+
+  Future<void> _setModeTerik(WidgetRef ref, bool enabled) async {
+    await ref
+        .read(databaseProvider)
+        .setSetting('mode_terik', enabled.toString());
     ref.read(demoSessionProvider.notifier).refresh();
   }
 }

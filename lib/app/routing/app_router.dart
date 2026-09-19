@@ -1,7 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/insights/presentation/insight_detail_screen.dart';
-import '../../features/monitoring/presentation/unit_detail_screen.dart';
+import '../../features/monitoring/presentation/unit_detail_v2.dart';
 import '../../features/monitoring/presentation/unit_summary_screen.dart';
 import '../../features/partners/presentation/listing_detail_screen.dart';
 import '../../features/partners/presentation/listing_form_screen.dart';

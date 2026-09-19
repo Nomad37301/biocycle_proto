@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/notifications/notification_service.dart';
+import '../../../core/time/app_clock.dart';
 import '../../insights/domain/insight_repository.dart';
-import '../../monitoring/domain/telemetry_repository.dart';
+import '../../monitoring/domain/telemetry_evaluator.dart';
 import '../../monitoring/domain/telemetry_models.dart';
+import '../../monitoring/domain/telemetry_repository.dart';
 import '../../partners/domain/partner_repository.dart';
 import '../domain/demo_session.dart';
+import '../domain/simulation_engine.dart';
 
 class DemoSessionController extends StateNotifier<DemoSessionState> {
   DemoSessionController(
@@ -17,6 +20,9 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     this._insights,
     this._notifications,
     this._partners,
+    this._simulationEngine,
+    this._evaluator,
+    this._clock,
   ) : super(const DemoSessionState());
 
   final AppDatabase _database;
@@ -24,8 +30,11 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
   final InsightRepository _insights;
   final NotificationService _notifications;
   final PartnerRepository _partners;
+  final SimulationEngine _simulationEngine;
+  final TelemetryEvaluator _evaluator;
+  final AppClock _clock;
+
   Timer? _timer;
-  int _tick = 0;
   bool _settingsLoaded = false;
   bool _starting = false;
   Future<void> _serial = Future.value();
@@ -36,7 +45,8 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     try {
       await _loadSettings();
       await _deliverPartnerNotifications(state.role.organizationId);
-      if (!state.manuallyPaused) _startTimer();
+      await _evaluateAll();
+      _startTimer();
     } finally {
       _starting = false;
     }
@@ -63,7 +73,7 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
   }
 
   void _startTimer() {
-    if (_timer != null || state.manuallyPaused) return;
+    if (_timer != null) return;
     state = state.copyWith(running: true);
     _timer = Timer.periodic(
       const Duration(seconds: 5),
@@ -79,19 +89,13 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
 
   Future<void> resumeForLifecycle() async {
     await _loadSettings();
-    if (!state.manuallyPaused) _startTimer();
+    _startTimer();
   }
 
   Future<void> toggleManualPause() async {
     final paused = !state.manuallyPaused;
     await _database.setSetting('simulator_paused', paused.toString());
     state = state.copyWith(manuallyPaused: paused);
-    if (paused) {
-      pauseForLifecycle();
-      state = state.copyWith(manuallyPaused: true);
-    } else {
-      _startTimer();
-    }
   }
 
   Future<void> setRole(DemoRole role) async {
@@ -119,15 +123,36 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
 
   Future<void> setScenario(DemoScenario scenario) async {
     state = state.copyWith(scenario: scenario);
-    _tick = 0;
     await _database.setSetting('demo_scenario', scenario.name);
-    await _enqueueUpdate();
+    final operation = _serial.then((_) async {
+      await _simulationEngine.triggerScenario(state.selectedUnitId, scenario);
+      await _evaluateAll();
+    });
+    _serial = operation.catchError((_) {});
+    await operation;
   }
 
   Future<void> setSelectedUnit(int unitId) async {
     state = state.copyWith(selectedUnitId: unitId);
     await _database.setSetting('selected_unit_id', '$unitId');
-    await _enqueueUpdate();
+    refresh();
+  }
+
+  Future<void> fastForward15Minutes() async {
+    state = state.copyWith(
+      isFastForwarding: true,
+      fastForwardLabel: 'Waktu simulasi dipercepat +15 menit',
+    );
+    final operation = _serial.then((_) async {
+      await _simulationEngine.fastForward(
+        const Duration(minutes: 15),
+        unitId: state.selectedUnitId,
+      );
+      await _evaluateAll();
+    });
+    _serial = operation.catchError((_) {});
+    await operation;
+    state = state.copyWith(isFastForwarding: false);
   }
 
   Future<void> _enqueueUpdate() {
@@ -136,21 +161,43 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
     return operation;
   }
 
+  Future<void> tick() async {
+    final operation = _serial.then((_) => _update());
+    _serial = operation.catchError((_) {});
+    await operation;
+  }
+
   Future<void> _update() async {
-    _tick++;
+    if (!state.manuallyPaused) {
+      await _simulationEngine.stepAll();
+    }
+    await _evaluateAll();
+  }
+
+  Future<void> _evaluateAll() async {
+    await _insights.evaluatePendingActions(currentTime: _clock.now);
     final units = await _telemetry.getUnits();
     final enabled =
         await _database.getSetting('notifications_enabled') == 'true';
-    for (final source in units) {
-      final scenario = source.id == state.selectedUnitId
-          ? state.scenario.name
-          : DemoScenario.normal.name;
-      final unit = await _telemetry.recordScenario(
-        source.id,
-        scenario,
-        _tick + source.id,
+
+    for (final unit in units) {
+      final devices = await _telemetry.getDevices(unit.id);
+      final device = devices.firstOrNull;
+      final latest = await _telemetry.getLatestMeasurements(unit.id);
+
+      final evalResult = _evaluator.evaluateUnit(
+        unitId: unit.id,
+        device: device,
+        latestMeasurements: latest,
+        currentTime: _clock.now,
       );
-      final update = await _insights.evaluate(unit);
+
+      final update = await _insights.evaluateEvaluationResult(
+        unitId: unit.id,
+        unitName: unit.name,
+        evaluationResult: evalResult,
+      );
+
       if (enabled && update.shouldNotify && update.event != null) {
         try {
           await _notifications.showInsight(
@@ -169,17 +216,20 @@ class DemoSessionController extends StateNotifier<DemoSessionState> {
 
   Future<void> updateThresholds(int unitId, UnitThresholds thresholds) async {
     await _telemetry.updateThresholds(unitId, thresholds);
-    final unit = await _telemetry.getUnit(unitId);
-    if (unit != null) await _insights.evaluate(unit);
     refresh();
   }
 
   Future<void> reset() async {
     pauseForLifecycle();
     final operation = _serial.then((_) async {
+      _simulationEngine.reset();
       await _database.reset();
       await _notifications.cancelAll();
-      _tick = 0;
+      _notifications.sessionGeneration =
+          int.tryParse(
+            await _database.getSetting('session_generation') ?? '',
+          ) ??
+          1;
       _settingsLoaded = true;
       state = const DemoSessionState(revision: 1);
       _startTimer();

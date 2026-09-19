@@ -20,14 +20,27 @@ extension DemoRoleLabel on DemoRole {
   };
 }
 
-enum DemoScenario { normal, hot, humid, offline }
+enum DemoScenario {
+  normal,
+  thermalAttention,
+  thermalCritical,
+  substrateWet,
+  substrateDry,
+  deviceOffline,
+  sensorError,
+  recovery,
+}
 
 extension DemoScenarioLabel on DemoScenario {
   String get label => switch (this) {
     DemoScenario.normal => 'Normal',
-    DemoScenario.hot => 'Suhu meningkat',
-    DemoScenario.humid => 'Kelembapan meningkat',
-    DemoScenario.offline => 'Perangkat offline',
+    DemoScenario.thermalAttention => 'Suhu substrat meningkat (Perhatian)',
+    DemoScenario.thermalCritical => 'Suhu substrat kritis',
+    DemoScenario.substrateWet => 'Media basah',
+    DemoScenario.substrateDry => 'Media kering',
+    DemoScenario.deviceOffline => 'Perangkat terputus (Offline)',
+    DemoScenario.sensorError => 'Gangguan sensor (Error)',
+    DemoScenario.recovery => 'Pemulihan (Recovery)',
   };
 }
 
@@ -39,6 +52,8 @@ class DemoSessionState {
     this.running = false,
     this.manuallyPaused = false,
     this.selectedUnitId = 1,
+    this.isFastForwarding = false,
+    this.fastForwardLabel,
   });
 
   final DemoRole role;
@@ -47,6 +62,8 @@ class DemoSessionState {
   final bool running;
   final bool manuallyPaused;
   final int selectedUnitId;
+  final bool isFastForwarding;
+  final String? fastForwardLabel;
 
   DemoSessionState copyWith({
     DemoRole? role,
@@ -55,6 +72,8 @@ class DemoSessionState {
     bool? running,
     bool? manuallyPaused,
     int? selectedUnitId,
+    bool? isFastForwarding,
+    String? fastForwardLabel,
   }) => DemoSessionState(
     role: role ?? this.role,
     scenario: scenario ?? this.scenario,
@@ -62,5 +81,7 @@ class DemoSessionState {
     running: running ?? this.running,
     manuallyPaused: manuallyPaused ?? this.manuallyPaused,
     selectedUnitId: selectedUnitId ?? this.selectedUnitId,
+    isFastForwarding: isFastForwarding ?? this.isFastForwarding,
+    fastForwardLabel: fastForwardLabel ?? this.fastForwardLabel,
   );
 }

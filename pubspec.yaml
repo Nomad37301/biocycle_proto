@@ -65,7 +65,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - asset/ChatGPT Image Aug 30, 2026, 10_03_50 PM.png
+    - asset/images/biocycle_logo.png
+    - asset/fonts/plus_jakarta_sans/OFL.txt
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: asset/fonts/plus_jakarta_sans/PlusJakartaSans-VariableFont_wght.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

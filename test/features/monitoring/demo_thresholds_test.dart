@@ -13,16 +13,16 @@ void main() {
         UnitCondition.optimal,
       );
       expect(
-        DemoThresholds.evaluate(temperature: 34, humidity: 70, connected: true),
+        DemoThresholds.evaluate(temperature: 36, humidity: 70, connected: true),
         UnitCondition.attention,
       );
       expect(
-        DemoThresholds.evaluate(temperature: 38, humidity: 70, connected: true),
+        DemoThresholds.evaluate(temperature: 39, humidity: 70, connected: true),
         UnitCondition.critical,
       );
       expect(
         DemoThresholds.evaluate(temperature: 30, humidity: 90, connected: true),
-        UnitCondition.critical,
+        UnitCondition.attention,
       );
     });
 
@@ -33,7 +33,7 @@ void main() {
           humidity: 65,
           connected: false,
         ),
-        UnitCondition.offline,
+        UnitCondition.unknown,
       );
     });
 

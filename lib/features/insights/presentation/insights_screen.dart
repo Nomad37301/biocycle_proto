@@ -70,7 +70,7 @@ class _InsightCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                item.kind == 'offline'
+                item.kind == 'deviceOffline'
                     ? Icons.wifi_off
                     : Icons.warning_amber_rounded,
                 color: color,

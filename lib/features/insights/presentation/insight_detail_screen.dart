@@ -74,6 +74,7 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
         ? AppColors.danger
         : AppColors.warning;
     return ListView(
+      key: const Key('insight-detail-list'),
       children: [
         ContentWidth(
           child: Column(
@@ -111,6 +112,25 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
                     Text(
                       'Terakhir diperbarui ${DateFormat('dd MMM yyyy, HH:mm').format(item.updatedAt)}',
                     ),
+                    if (item.triggerMeasuredAt != null)
+                      Text(
+                        'Pemicu ${item.parameterKey ?? 'sensor'} · ${item.triggerValue?.toStringAsFixed(1) ?? 'Tidak ada'} · ${DateFormat('dd MMM yyyy, HH:mm').format(item.triggerMeasuredAt!)}',
+                      ),
+                    Text(
+                      'Konfigurasi ${item.configVersion ?? 'tidak tercatat'}',
+                    ),
+                    Text('SOP ${item.sopVersion ?? 'tidak tercatat'}'),
+                    const SizedBox(height: 12),
+                    if (item.acknowledgedAt == null && item.isActive)
+                      FilledButton.tonalIcon(
+                        onPressed: () => _acknowledge(item.id),
+                        icon: const Icon(Icons.done),
+                        label: const Text('Akui insight'),
+                      )
+                    else if (item.acknowledgedAt != null)
+                      Text(
+                        'Diakui oleh ${item.acknowledgedBy ?? 'operator'} · ${DateFormat('dd MMM, HH:mm').format(item.acknowledgedAt!)}',
+                      ),
                   ],
                 ),
               ),
@@ -206,6 +226,14 @@ class _InsightDetailScreenState extends ConsumerState<InsightDetailScreen> {
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+
+  Future<void> _acknowledge(int insightId) async {
+    await ref
+        .read(insightRepositoryProvider)
+        .acknowledge(insightId, 'Operator BSF');
+    ref.invalidate(insightProvider(insightId));
+    ref.invalidate(insightsProvider);
   }
 
   Widget _actionHistory() => ref

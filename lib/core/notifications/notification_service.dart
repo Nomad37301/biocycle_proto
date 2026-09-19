@@ -9,6 +9,7 @@ class NotificationService {
   final StreamController<String> _taps = StreamController.broadcast();
 
   Stream<String> get taps => _taps.stream;
+  int sessionGeneration = 1;
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -22,13 +23,13 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
       onDidReceiveNotificationResponse: (response) {
-        final payload = response.payload;
-        if (payload != null) _taps.add(payload);
+        final route = safeRoute(response.payload);
+        if (route != null) _taps.add(route);
       },
     );
     final launch = await _plugin.getNotificationAppLaunchDetails();
     return launch?.didNotificationLaunchApp == true
-        ? launch?.notificationResponse?.payload
+        ? safeRoute(launch?.notificationResponse?.payload)
         : null;
   }
 
@@ -60,7 +61,7 @@ class NotificationService {
           priority: Priority.high,
         ),
       ),
-      payload: '/insights/$id',
+      payload: _withGeneration('/insights/$id'),
     );
   }
 
@@ -84,7 +85,7 @@ class NotificationService {
           priority: Priority.high,
         ),
       ),
-      payload: payload,
+      payload: _withGeneration(payload),
     );
   }
 
@@ -92,5 +93,34 @@ class NotificationService {
     if (!_isMobile) return;
     await _plugin.cancelAll();
   }
+
+  String? safeRoute(String? payload) {
+    if (payload == null) return null;
+    final uri = Uri.tryParse(payload);
+    if (uri == null || !uri.path.startsWith('/')) return null;
+    final generation = int.tryParse(uri.queryParameters['session'] ?? '');
+    if (generation != sessionGeneration) return null;
+    const allowedPrefixes = [
+      '/insights/',
+      '/requests/',
+      '/units/',
+      '/listings/',
+      '/partners/',
+    ];
+    return allowedPrefixes.any(uri.path.startsWith) ? uri.toString() : null;
+  }
+
+  String _withGeneration(String payload) {
+    final uri = Uri.parse(payload);
+    return uri
+        .replace(
+          queryParameters: {
+            ...uri.queryParameters,
+            'session': '$sessionGeneration',
+          },
+        )
+        .toString();
+  }
+
   void dispose() => _taps.close();
 }
